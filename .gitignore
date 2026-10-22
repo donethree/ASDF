@@ -1,0 +1,6 @@
+*.log
+.superpowers/
+TestResults/
+node_modules/
+# Dev packages only, and a lockfile would record the local npm registry.
+package-lock.json

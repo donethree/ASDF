@@ -1,0 +1,32 @@
+# Scenario: manual setup and scoped discovery
+
+Read-only simulation; use no real ADO calls, user prompts, settings writes or
+model CLI launches. Apply intake, do-next and ado-work-items.
+
+## Inputs
+
+- Commerce has watchScopes for team Data Movement; no legacy areaPaths.
+- Tracked PBI 42 is assigned to the current user but outside this team's areas.
+- Tracked PBI 43 is in another project in the same configured org, explicitly
+  intaken earlier; that project has no discovery watch.
+- The team source rejects @TeamAreas. Another source returns exactly 200 IDs.
+- Separately, interactive intake gets access denied and another invocation
+  has no saved configuration.
+
+## Expected actions
+
+1. Discover only explicit source scopes with generated queries and top 200.
+2. A full page advances the ID cursor and queries again; do not call it complete.
+3. An unsupported team source is reported, never widened to the project or
+   treated as an empty assignment inventory.
+4. Refresh assignment for tracked 42 and 43 through bounded tracked-ID queries
+   independent of area/team/type/tag/completed filters, including unwatched
+   projects. A successful assignment result keeps their current ownership.
+5. Failed/incomplete assignment batches supply no signals/snapshot updates;
+   their IDs are deferred from work, even if local stage remains actionable.
+6. The live intake error identifies the actual org/project/error and asks the
+   user to confirm manual CLI values and MCP access before any mutation.
+7. Missing setup tells the user to run the resolved `node "<root>\asdf.js" --init`
+   manually. No init skill, wizard launch by agent or special first-run check.
+8. Existing parent/task roles, In Progress gating, approval and session ownership
+   rules are unchanged.

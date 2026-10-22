@@ -1,0 +1,10 @@
+{ "version": 1,
+  "hooks": {
+    "sessionStart": [ { "type": "command",
+      "powershell": "node \"$env:ASDF_PLUGIN_ROOT/hooks/session-start.ts\"",
+      "bash": "node \"$ASDF_PLUGIN_ROOT/hooks/session-start.ts\"",
+      "env": { "ASDF_PLUGIN_ROOT": "${PLUGIN_ROOT}" }, "timeoutSec": 30 } ],
+    "preToolUse": [ { "type": "command", "matcher": "powershell|bash|.*repo_pull_request_write|.*start_process|.*interact_with_process",
+      "powershell": "node \"$env:ASDF_PLUGIN_ROOT/hooks/guard.ts\"",
+      "bash": "node \"$ASDF_PLUGIN_ROOT/hooks/guard.ts\"",
+      "env": { "ASDF_PLUGIN_ROOT": "${PLUGIN_ROOT}" }, "timeoutSec": 15 } ] } }

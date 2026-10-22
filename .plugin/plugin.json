@@ -1,0 +1,7 @@
+{ "name": "asdf",
+  "description": "ASDF (Automated Software Development Workflow): runs the HLD, plan, TDD, review, PR and merge cycle against Azure DevOps work items, with the steering automated.",
+  "version": "0.1.0",
+  "license": "MIT",
+  "skills": "skills",
+  "hooks": "hooks/hooks.json",
+  "postInstallMessage": "In a terminal, from the ASDF plugin directory, run node asdf.js --init. The numbered wizard configures local context, checkouts and project/team watches; it does not log in or contact Azure DevOps." }

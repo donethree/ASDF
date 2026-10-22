@@ -1,0 +1,118 @@
+{
+  "feature-breakdown": [
+    "A Feature never gets an HLD, a Review task, implementation tasks or a PR.",
+    "Detailed design belongs in each PBI's HLD, not in the breakdown.",
+    "Create only the PBIs the approved breakdown lists.",
+    "Never start a PBI that waits for another; a person starts it.",
+    "Never edit or remove a PBI that has started or is assigned to someone else.",
+    "Close the Feature only if it is assigned to you and every child is complete.",
+    "A Feature's PBIs never carry the asdf tag.",
+    "Re-read assignment first; leave any PBI no longer assigned to you untouched.",
+    "Do the deep dive from `asdf:brainstorming` step 2 at the Feature's breadth, and write it to the Feature's `deep-dive.md`."
+  ],
+  "using-asdf": [
+    "No work starts without a Feature, PBI, User Story, or Task.",
+    "Azure DevOps is reached only through the Azure DevOps MCP server.",
+    "Nothing ASDF writes goes into the product repo except code changes on ASDF branches.",
+    "Keep it simple: make the smallest change that delivers the feature.",
+    "Every ADO comment it writes starts with `[ASDF]` and uses a template from `asdf:ado-work-items`."
+  ],
+  "ado-work-items": [
+    "Every ASDF comment starts with [ASDF].",
+    "Never vote on a pull request.",
+    "Never set bypassPolicy.",
+    "Post one comment per question round.",
+    "ASDF's own HLD, Review and implementation tasks are never items of their own.",
+    "If an org has no WIQL tool, skip that org and report it; never mark its items unassigned.",
+    "Approval by state counts only when the HLD task moved to Completed after the approval request.",
+    "Close or reopen an HLD task only when ado.hldOwned is true.",
+    "After a blocker comment, run stage blocked with -Reason, so that a reply unblocks the item.",
+    "Every pull request call uses the item's repo: repo.org, repo.project and repo.name.",
+    "A Feature's PBIs never carry the asdf tag.",
+    "Create a Feature only with the person's OK.",
+    "Never count the Breakdown task as one of a Feature's PBIs."
+  ],
+  "intake": [
+    "If the user cannot name a Feature, PBI, User Story, or Task, stop and say so.",
+    "A Task never starts on an HLD that is not approved yet.",
+    "Always set hld.approvalRequestedAt right before stage awaiting-approval.",
+    "If item-new returns ASDF_ID_CLASH, tell the user that ASDF can't track this item, and stop.",
+    "If the Task names no package with a workspace, post the blocker comment asking which one, and stop.",
+    "A Feature goes straight to asdf:feature-breakdown; never ask whether it should be a Feature.",
+    "Never suggest a split once an HLD round has been posted.",
+    "When in doubt, it is not large.",
+    "Skip the size check when the PBI already has an HLD task that ASDF didn't create for it."
+  ],
+  "brainstorming": [
+    "An unanswered question stays open.",
+    "Run the builder check before requesting approval.",
+    "List every new dependency in the HLD.",
+    "Never create a second HLD for a parent that already has one.",
+    "Never design over an HLD that another person or another ASDF item drives.",
+    "Before requesting approval, move a Completed HLD task back to InProgress.",
+    "Resolve it with `asdf.ts memory-path -Org <repo.org> -Project <repo.project> -Repo <repo.name>` and read the returned path.",
+    "Never search the disk for code: an item's code is in one of the configured workspaces.",
+    "Ask the size question alone in its round.",
+    "Never ask the size question for one of a Feature's PBIs.",
+    "Never ask again what the Feature's breakdown settled.",
+    "Skip the size check when step 1 adopted an existing HLD task.",
+    "Never draft or revise the HLD before `deep-dive.md` is written.",
+    "Every statement about existing code cites the file and line.",
+    "Search every configured workspace for callers and readers, not only this one.",
+    "Read the code the implementation will build on: `origin/<default branch>`.",
+    "This goes for every workspace you search, not just the item's.",
+    "Otherwise read through git, never from the checkout.",
+    "Breaking something that works today is never an ASDF assumption.",
+    "If the design builds something new instead, the HLD says why the existing code doesn't fit.",
+    "Give Reuse, What must keep working and Edge cases a section each, under those headings.",
+    "Run the code check with the builder check, once per HLD version.",
+    "Give it the domain, each workspace with the commit the deep dive read it at, and the paths to `hld.md` and `deep-dive.md`."
+  ],
+  "writing-plans": [
+    "Record planning decisions as P-numbered decisions.",
+    "Close the HLD task only when ado.hldOwned is true.",
+    "On a re-plan, archive the old plan.md and sdd\\ledger.md before writing the new plan.",
+    "Every entry in the HLD's What must keep working and Edge cases sections gets a test in the plan, or the plan names the existing test that covers it."
+  ],
+  "using-git-worktrees": [
+    "Worktrees live under <asdf-context>\\worktrees\\, never inside the repo.",
+    "The branch is repo.branch, set when the item was created; never name a branch yourself.",
+    "Never search the disk for code, and never clone a repo."
+  ],
+  "subagent-driven-development": [
+    "Pause and ask before adding a dependency the HLD did not list.",
+    "If heartbeat fails with ASDF_LOCK_NOT_OWNER, stop at once and write nothing more."
+  ],
+  "executing-plans": [
+    "Use this skill only when subagents cannot be dispatched.",
+    "If heartbeat fails with ASDF_LOCK_NOT_OWNER, stop at once and write nothing more."
+  ],
+  "requesting-code-review": [
+    "Run every review skill the repo provides.",
+    "Check for over-engineering and bloat, not just bugs.",
+    "The ASDF reviewer checks that everything that worked before still works, including callers and readers the HLD doesn't list."
+  ],
+  "receiving-code-review": [
+    "Mark a thread Fixed only after the fix is pushed.",
+    "Push only repo.branch."
+  ],
+  "finishing-a-development-branch": [
+    "Set auto-complete only after ASDF's own merge checks pass.",
+    "Close the parent only if it is assigned to you and every child task is complete.",
+    "Never open a second PR for an item: reuse an active ado.prId.",
+    "Close the HLD task only when ado.hldOwned is true.",
+    "Use the returned path, not a name-only index.",
+    "Push only repo.branch."
+  ],
+  "do-next": [
+    "Most-finished work first.",
+    "Do not stop after one item.",
+    "Skip any org whose Azure DevOps MCP server is unavailable, and report it.",
+    "Skip any org without a WIQL tool, and report it.",
+    "If item-new returns ASDF_OWN_TASK, skip that id.",
+    "When signals move an item to blocked, post the blocker comment with that reason.",
+    "If item-new returns ASDF_ID_CLASH, skip that id and report it in the summary.",
+    "If heartbeat fails with ASDF_LOCK_NOT_OWNER, stop working on that item at once and write nothing more.",
+    "Never move a waiting PBI to In Progress; list it as ready to start."
+  ]
+}
