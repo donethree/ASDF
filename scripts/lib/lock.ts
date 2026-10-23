@@ -6,6 +6,7 @@ import { getConfig, withSettingsGuard } from './settings.ts';
 import { fail, now, parseTime, prop, readJson, same, stamp, type Json } from './util.ts';
 import { artifactPath, atomicJson } from './artifacts.ts';
 import { readWorkerClaim, withItemGuard, writeWorkerClaim } from './workerLease.ts';
+import { isLiveReserved, readLiveWatch, validateLiveKey, type LiveKey } from './liveWatch.ts';
 
 function lockPath(id: number): string {
   const path = itemPath(id);
@@ -60,8 +61,18 @@ function tryCreate(path: string, owner: string, at: Date): boolean {
   return true;
 }
 
-export function lockItem(id: number, owner: string, at?: string | Date): Json {
-  return withSettingsGuard(() => withItemGuard(id, () => acquire(id, owner, at)));
+export function lockItem(id: number, owner: string, at?: string | Date, liveKey?: LiveKey): Json {
+  return withSettingsGuard(() => withItemGuard(id, () => {
+    const watch = readLiveWatch(id);
+    if (liveKey) validateLiveKey(id, liveKey);
+    if (isLiveReserved(watch, now(at)) && !liveKey) return { acquired: false, owner: 'interactive-session', tookOver: false };
+    const result = acquire(id, owner, at);
+    if (result.acquired && liveKey) {
+      const lock = readLock(lockPath(id));
+      atomicJson(lockPath(id), { ...lock, liveWatchId: liveKey.watchId, liveGeneration: liveKey.generation });
+    }
+    return result;
+  }));
 }
 
 function acquire(id: number, owner: string, at?: string | Date): Json {
@@ -117,6 +128,7 @@ export function unlockItem(id: number, owner: string): Json {
 
 export function isLocked(id: number, at?: string | Date): boolean {
   if (readWorkerClaim(id)) return true;
+  if (isLiveReserved(readLiveWatch(id), now(at))) return true;
   const path = lockPath(id);
   if (!existsSync(path)) return false;
   return !isStale(readLock(path), path, now(at));

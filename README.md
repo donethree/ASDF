@@ -117,6 +117,10 @@ each ask **Add another?** after an accepted entry. Enter one value at a time;
 spaces and commas in a path are literal, not separators.
 
 1. **Context folder:** for example `C:\asdf-context`, outside every Git repo.
+   A separate prompt collects the **worktree parent folder**, such as `Q:\w`.
+   ASDF reserves six-character names there so each newly created worktree's
+   complete root path is at most 13 characters. The wizard rejects parents too
+   long for that budget. Planning files, logs and sessions stay in the context.
 2. **Organizations and projects:** `https://dev.azure.com/contoso/Commerce`
    identifies organization `contoso` and project `Commerce`. Paste the whole
    URL or use the prompt's name form. Registration alone does not watch a project.
@@ -167,7 +171,7 @@ an already-running Copilot session may need its normal MCP reload.
 | Start work on something | In a session, say "work on PBI 12345" (an id or a URL). If you don't name a Feature, PBI, User Story or Task, ASDF asks for one. It never works without one. |
 | Start large work | Name a Feature instead of a PBI. ASDF breaks it into PBIs, each with its own HLD and PR. If you name a PBI that looks too big for one PR, ASDF suggests making it a Feature, and you decide. |
 | Answer design questions | Reply on the HLD task, for example `Q1 A, Q2 B` or `go with your recommendations`. Or, in a session: "let's go through the open questions for 12345". |
-| Approve the HLD | Post a comment starting with `approved` on the HLD task, or mark the HLD task Done. You can also approve in a session. |
+| Approve the HLD | Post `approved` on the HLD task, or mark that task Done after the request. You can also approve the current version in an interactive session. Conditional approval/change requests require revision. |
 | Approve a Feature's breakdown | The same, on its Breakdown task. |
 | Start a PBI that waits for another | Move it to In Progress. ASDF's run summary tells you when what it waits for is done. |
 | Send a design back | Reopen the HLD task before the PR is set to auto-complete. |
@@ -209,6 +213,51 @@ Azure DevOps has no level between a PBI and a Task, so large work is a **Feature
 - **You start a PBI that waits for another,** by moving it to In Progress. ASDF never starts it; its run summary tells you when what it waits for is done. That way, for example, you can wait until an import has actually run in production.
 - **When every PBI is finished,** ASDF closes the Feature, if it's yours and all its children are complete, and posts a summary.
 - **Changing the plan.** Reopening the Breakdown task revises the breakdown. PBIs that have started keep their own HLDs, and ASDF never removes a PBI.
+
+## Interactive continuation
+
+Manually started item work stays in its conversation. When an HLD or Feature
+breakdown waits for answers/approval, ASDF registers a **five-minute session
+check**, when the host exposes its recurring-prompt tools. You can give feedback
+or approve the current design in chat, post `approved` in ADO, or mark the owned
+design task Done. Chat approval continues immediately; ADO changes are picked
+up by the next check without a separate "continue" prompt.
+
+The same live flow monitors PR feedback, build/check readiness and merge
+completion. PR approval still requires real ADO reviewer votes and policy
+checks; saying "approved" in chat cannot supply a PR vote. After a Feature
+breakdown is approved, ready child PBIs continue one at a time in the same
+conversation, with separate HLDs/worktrees/PRs. Dependency-gated Proposed
+children still require a person to start them, and other workers' children
+are never taken over.
+
+Polling runs only while the host can process this interactive session.
+Busy tools/question forms, suspension or closing it may delay ticks. If
+scheduling is unavailable or disallowed, ASDF says so instead of installing
+a daemon or claiming a check is running. There are no new setup settings.
+Unattended do-next (including inline mode), persistent workers and subagents
+do not create these live watches.
+
+A 15-minute reservation is renewed only after a complete successful refresh.
+It keeps the hourly loop from taking the active live item while waiting, but
+expires when checks stop succeeding. Errors do not imply approval or extend
+priority forever. The running session can notice restored access without a
+manual prompt, but must defer to any worker that acquired the item meanwhile.
+Unchanged polls are quiet; decisions/errors use the existing compact log,
+never chat bodies or per-check heartbeat noise.
+
+Ask to stop watching to cancel only this thread's watch. Local `live-info -Id`
+and `session-info -Id` expose the current wait and expiry; they do not start a
+model or polling. Rejoining manually revalidates state and the host schedule
+rather than trusting stale chat/schedule IDs.
+
+Approval is version-bound in all modes. Accepted feedback prevents the prior
+version from being implemented, even after live priority expires. Later
+feedback supersedes an earlier Done transition. ADO comment approvals use
+`approved` or `approved, ship it` with optional `.`/`!`; `approved if ...` or
+`approved, but change ...` are feedback, not unconditional approval. Shared
+designs cannot be approved by proxy. Feature self-ID design fallbacks use
+explicit approval, never closing the Feature as a design task.
 
 ## The hourly automation (GitHub Copilot app or CLI)
 
@@ -347,7 +396,7 @@ To check that it works, ask Copilot to run `echo ASDF-GUARD-SELFTEST`. It should
   asdf.config.json        orgs, projects, MCP servers, work item types, workspaces, user name
   memory\org-<org>\project-<project>\repo-<repo>.md
                          merged items and decisions, isolated by full repository identity
-  worktrees\<id>-<slug>\  a git worktree per item in flight (branch user/<name>/<id>-<slug>), removed after merge
+  # Code worktrees are separate: <worktreeRoot>\<six-character-name>
   <id>-<slug>\            one folder per work item, kept after merge
     item.md               snapshot of the work item
     execution-context.json verified execution packet for code workers; refreshed, never treated as a permanent grant
@@ -364,6 +413,15 @@ To check that it works, ask Copilot to run `echo ASDF-GUARD-SELFTEST`. It should
 ```
 
 Nothing goes into your repos except the code changes on ASDF's branches.
+
+`worktreeRoot` is selected during manual init and used only for new worktrees.
+Existing recorded worktrees can be anywhere outside protected checkouts/item
+artifacts and are not relocated automatically. They must still be registered
+with the correct Git repository and use the recorded branch. Location selection
+does not grant directory access. Re-run init on an older setup before creating
+new worktrees. To shorten an already-created legacy build root, explicitly move
+that linked worktree with Git and update its recorded path while holding its
+item lock; ASDF will not move or delete your work merely because the root changed.
 
 Use `asdf.ts memory-path -Org <org> -Project <project> -Repo <repo>` for the encoded memory path. Legacy name-only indexes are left in place; an entry is reused only after its linked item's full repository identity is verified. Equal repository names in different projects are supported; use `item-repo -Org ... -Project ... -Name ...` to select one. Equal work-item ids across organizations still report an explicit collision.
 

@@ -1,10 +1,10 @@
 // Settings (where asdf-context lives) and asdf.config.json (orgs, projects, workspaces, user name).
-import { existsSync, mkdirSync, realpathSync } from 'node:fs';
+import { existsSync, mkdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { AsdfError, fail, isObject, prop, readJson, same, toList, writeJson, type Json } from './util.ts';
-import { resolveWorkspace } from './workspaces.ts';
+import { normalizeWorktreeRoot, resolveWorkspace } from './workspaces.ts';
 import { DEFAULT_TYPES, normalizeConfig, type AsdfConfig } from './watchScopes.ts';
 import { withDirectoryGuard, physical } from './localState.ts';
 
@@ -45,7 +45,7 @@ export function validateContextPath(contextPath: string): string {
   }
   let existing = full;
   while (!existsSync(existing) && dirname(existing) !== existing) existing = dirname(existing);
-  for (let dir = realpathSync.native(existing); ; dir = dirname(dir)) {
+  for (let dir = physical(existing, 'ASDF_CONTEXT_UNAVAILABLE'); ; dir = dirname(dir)) {
     if (existsSync(join(dir, '.git'))) fail('ASDF_CONTEXT_INSIDE_REPO', `${full} resolves inside the git work tree ${dir}`);
     if (dirname(dir) === dir) break;
   }
@@ -164,6 +164,7 @@ export function prepareConfig(input: unknown): AsdfConfig {
   const config = structuredClone(input);
   config.lockStaleMinutes ??= 90;
   config.maxQuestionsPerRound ??= 4;
+  if (config.worktreeRoot !== undefined) config.worktreeRoot = validateContextPath(normalizeWorktreeRoot(config.worktreeRoot));
   config.workItemTypes ??= structuredClone(DEFAULT_TYPES);
   config.workspaces = toList(config.workspaces)
     .filter((entry) => entry)

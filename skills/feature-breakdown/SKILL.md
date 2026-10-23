@@ -11,6 +11,11 @@ Use the CLI (`asdf.ts`) for state, and `asdf:ado-work-items` for every ADO read,
 
 Acquire or reuse the item operation lock from `asdf:using-asdf` on every entry. Recheck the Feature's assignment before writes. Before revising or approving its design, check the Breakdown task's current owner and `ado.hldOwned`, even at `answers-received`. A shared Breakdown follows brainstorming's shared-design path: read replies and wait, never rewrite it. The fallback `ado.hldId == id` may be edited only while the Feature itself is assigned to you; it is not permission to close the Feature as a design task.
 
+Every design entry also follows brainstorming's pending-feedback reconciliation
+and `design-role` observation, including fresh unattended ownership after a
+stopped live session. Read session receipt content, record it idempotently,
+and consume the revision or confirmed forwarding before publication/delegation.
+
 ## Cases
 
 | Stage, or situation | Sections |
@@ -32,7 +37,7 @@ Run `asdf.ts item -Id <id>`. If `ado.hldId` is set, carry on. Otherwise look for
 - **One in the `Completed` category:** it's approved already. Store its id, copy its newest breakdown attachment into `breakdown.md` and `breakdown.v1.md`, write `{"hld":{"version":1,"approvedBy":"state","approvedAt":"<utc now>"}}`, run `asdf.ts stage -Id <id> -Stage approved`, and continue with section 7.
 - **Anything else** (assigned to someone else, or another item's `ado.hldId`): never write over a breakdown that another person drives. Store its id, write `{"hld":{"approvalRequestedAt":"<utc now>"}}`, run `asdf.ts stage -Id <id> -Stage awaiting-approval`, and stop.
 
-If the project's process doesn't allow a Task under a Feature (`add_child` fails), store the Feature's own id as `ado.hldId` with `"hldOwned":false`. Its comments then carry the rounds and the approval: only a comment starting with "approved" approves, and ASDF never closes the Feature as a design task.
+If the project's process doesn't allow a Task under a Feature (`add_child` fails), store the Feature's own id as `ado.hldId` with `"hldOwned":false`. Its comments then carry the rounds and the approval: shared signals require an unconditional approval, and ASDF never closes the Feature as a design task.
 
 ## 2. Gather inputs (read-only)
 
@@ -87,18 +92,34 @@ Follow `asdf:brainstorming` steps 9 and 10, with:
 - the Breakdown task's description from the `breakdown-description` template;
 - the `approval-request` and `session-approval` templates, with `{design}` set to `Breakdown`.
 
-`asdf.ts signals` detects the approval, as for an HLD. After an approval in a live session, continue with section 7.
+`asdf.ts signals` detects the approval, as for an HLD. In live mode use
+`asdf:live-continuation` for waiting/chat handling and continue with section 7
+as soon as current approval is confirmed, whether it came from chat or ADO.
+For the Feature self-ID fallback, never close the Feature as a design task;
+explicit comment/session approval is required, not a Done shortcut.
 
 ## 7. After approval: create the PBIs (stage `approved`)
 
-1. **Close the Breakdown task** if `ado.hldOwned` is true: move it to the `Completed` category, and write `{"hld":{"closedAt":"<utc now>"}}` with `item-set`.
+1. **Recheck the approved design and ownership.** For a shared/delegated
+   Breakdown, copy the owner's current approved attachment/description into
+   the local versioned design, preserving the superseded draft and provenance;
+   an old local copy is not the approved spec. Close the Breakdown task only
+   if it is still assigned to you, this item currently drives it and
+   `ado.hldOwned` is true. Then write `hld.closedAt`. Leave shared tasks and
+   the Feature self-ID fallback untouched.
 2. **Mark the assumptions approved** in `decisions.md`: `ASDF assumption, approved with breakdown v<N>`.
 3. **Create the missing PBIs.** Create only the PBIs the approved breakdown lists. For each entry without a PBI, create one under the Feature (`asdf:ado-work-items`, "Creating a Feature's PBI"), with its description from `pbi-description`. A PBI that waits for another is created in the `Proposed` category. A Feature's PBIs never carry the asdf tag.
 4. **Update the reused PBIs.** Re-read assignment first; leave any PBI no longer assigned to you untouched. Within that owned set, the PBI this Feature was split from gets its title and scope from the breakdown. You can tell it by its `size` (`phase`) and its `ado.parentId` (this Feature), both set in section 10. Its only round was the size question, so it counts as not started. Do the same for each other existing child PBI the breakdown reuses, if it hasn't started (in the `Proposed` category, with no HLD round posted). That means setting its title from the breakdown and appending `pbi-scope`. Never edit or remove a PBI that has started or is assigned to someone else.
 5. **Track them.** For each of the Feature's PBIs assigned to you, run `asdf.ts item-new -Org <org> -Project <project> -Id <pbi id> -Kind parent -Type "<type>" -Title "<title>" -ParentId <feature id>`, then write `{"size":"phase"}` with `item-set`.
 6. **Record them on the Feature** with `item-set`, in the breakdown's order: `{"ado":{"pbis":[{"id":<id>,"waitsFor":[<ids>]}]}}`, one entry per PBI.
-7. **Start the PBIs that wait for nothing:** re-read each PBI and move it to the first `InProgress` state only if it is still assigned to you and still Proposed. Leave other people's and already-started PBIs untouched. The next `do-next` pass picks it up like any PBI. Never start a PBI that waits for another; a person starts it.
+7. **Start the PBIs that wait for nothing:** re-read each PBI and move it to the first `InProgress` state only if it is still assigned to you and still Proposed. Leave other people's and already-started PBIs untouched. Unattended entry leaves pickup to do-next. Never start a PBI that waits for another; a person starts it.
 8. Run `asdf.ts stage -Id <feature id> -Stage awaiting-pbis`.
+9. In live mode return to live-continuation: refresh all child identities/states,
+   select the next ready child with live-child, release the Feature's operation,
+   and acquire that child's own lock. Keep the logical thread/root, not the
+   old watch or owner. Continue eligible PBIs sequentially through their HLD/
+   PR workflows. If none can proceed, report prerequisites/other owners and
+   stop monitoring; do not start dependent Proposed work or steal a child.
 
 ## 8. Close-out (stage `pbis-done`)
 

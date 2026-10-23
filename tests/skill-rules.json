@@ -75,7 +75,7 @@
     "Every entry in the HLD's What must keep working and Edge cases sections gets a test in the plan, or the plan names the existing test that covers it."
   ],
   "using-git-worktrees": [
-    "Worktrees live under <asdf-context>\\worktrees\\, never inside the repo.",
+    "Worktrees may live outside asdf-context, but never inside another checkout or item artifact folder.",
     "The branch is repo.branch, set when the item was created; never name a branch yourself.",
     "Never search the disk for code, and never clone a repo."
   ],

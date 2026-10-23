@@ -5,7 +5,10 @@ description: Use when starting implementation for an ASDF item - creates or reus
 
 # Using Git Worktrees (ASDF)
 
-Each ASDF item gets its own git worktree and branch, so several items can be in progress in the same repo without clashing, and the user's own checkout is never touched. Worktrees live under <asdf-context>\worktrees\, never inside the repo.
+Each ASDF item gets its own git worktree and branch, so several items can be in progress in the same repo without clashing, and the user's own checkout is never touched. Worktrees may live outside asdf-context, but never inside another checkout or item artifact folder.
+Manual init collects `worktreeRoot` separately from the context folder. New
+worktree paths are at most 13 characters for legacy build-root limits. A short
+example is `Q:\w\a1b2c3`; titles and work-item IDs do not lengthen the path.
 
 **Announce at start:** "I'm using the using-git-worktrees skill to set up the item's worktree."
 
@@ -13,7 +16,13 @@ Hold the item operation lock from `asdf:using-asdf`. The app's selected project 
 
 ## 1. Reuse what's there
 
-Run `asdf.ts item -Id <id>`. If `repo.worktreePath` is set, run `asdf.ts execution-context -Id <id> -Owner <operation owner>` to verify it before reuse. On success, save the returned packet and skip to step 4. On mismatch, block; never switch branches, overwrite that folder or substitute another checkout. A later `do-next` pass resumes in the same verified worktree.
+Run `asdf.ts item -Id <id>`. If `repo.worktreePath` is set and exists, run
+`execution-context` to verify it before reuse, wherever it is located. On
+success save the packet and skip to step 4. A missing recorded directory can
+be a reserved path from an interrupted creation: continue to step 3 using that
+same path. Never replace an existing directory, switch its branch or move it
+automatically. A too-long existing build root needs an explicit `git worktree
+move`/record-update operation under ownership, not a drive mapping or bypass.
 
 ## 2. The workspace
 
@@ -28,12 +37,17 @@ The branch is repo.branch, set when the item was created; never name a branch yo
 
 First check the recorded workspace is still configured and its origin identifies `repo.org`, `repo.project` and `repo.name`. Use that absolute path, not the host cwd.
 
-1. `git -C "<workspace>" fetch origin`
-2. `git -C "<workspace>" symbolic-ref --short refs/remotes/origin/HEAD` prints `origin/<default branch>`.
-3. `git -C "<workspace>" worktree add "<asdf-context>\worktrees\<id>-<slug>" -b "<repo.branch>" "origin/<default branch>"`
+1. `asdf.ts worktree-path -Id <id> -Owner <operation owner>` reserves a stable
+   unused short path under the init-selected root and records it on the item.
+   It creates no checkout and grants no host permissions. If the old config
+   has no root, direct the user to manual `asdf.js --init`; do not guess one.
+2. `git -C "<workspace>" fetch origin`
+3. `git -C "<workspace>" symbolic-ref --short refs/remotes/origin/HEAD` prints `origin/<default branch>`.
+4. `git -C "<workspace>" worktree add "<returned path>" -b "<repo.branch>" "origin/<default branch>"`
 
 - **If the branch already exists** (an earlier attempt), add the worktree on that branch without `-b`.
-- **Record the location:** write `{"repo":{"worktreePath":"<path>"}}` and run `asdf.ts item-set`.
+- **Use the recorded location:** reuse the path returned by worktree-path on
+  retries. If another process occupied it, report the collision; never clear it.
 - **Verify before execution:** run `asdf.ts execution-context -Id <id> -Owner <operation owner>` and save the JSON as `<item>\execution-context.json`. On failure, stop before code edits or builds; use the blocker flow, except lock loss permits no further writes.
 
 ## 4. Baseline
@@ -54,7 +68,7 @@ Before changing anything, prove the worktree starts clean:
 | Excuse | Reality |
 |---|---|
 | "I'll just work in the user's checkout" | It belongs to the user. Worktrees keep items apart. |
-| "A worktree inside the repo is simpler" | It pollutes the repo. Worktrees live in the asdf-context. |
+| "A worktree inside the repo is simpler" | It pollutes the repo. Use the separately configured short root, outside source checkouts and artifacts. |
 | "The repo isn't cloned; I'll clone it" | Big repos need their own setup. Block and ask. |
 | "I'll search the disk for the repo" | Only the workspaces listed in init. Block and ask which package. |
 | "The baseline can wait" | A dirty baseline makes every later failure ambiguous. |

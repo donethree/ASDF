@@ -40,12 +40,54 @@ flowchart LR
 Five constraints shape the design:
 
 - **ADO is reached only through the Azure DevOps MCP server**, one server per org. Skills call its tools as `<mcpServer>-<tool>`, never the `az` CLI or REST calls, and the guard blocks both. Code moves with `git`.
-- **Nothing ASDF writes goes into the product repo** except code on its `user/<userName>/<id>-<slug>` branches. Designs, plans, questions, decisions, reviews, worktrees and state all live in the asdf-context folder.
+- **Nothing ASDF writes goes into the product repo** except code on its `user/<userName>/<id>-<slug>` branches. Designs, plans, questions, decisions, reviews and state live in asdf-context; code worktrees use the separately configured short parent folder.
 - **ASDF never searches the disk for code.** An item's code is in one of the workspaces (local checkouts) listed at init. The work item names its package, and ASDF matches it to a workspace.
 - **Unattended runs retain host permissions.** Required approvals must be configured through normal host controls; the guard hook is supplementary, not a sandbox or permission bypass. Unattended skills never call `ask_user`; questions go to ADO as comments.
 - **ASDF acts under your identity** in ADO and git. Every comment it posts starts with `[ASDF]`, and that marker is how the signal rules tell its comments from people's.
 
 ## The flow
+
+### Live interactive continuation
+
+[`live-continuation`](skills/live-continuation/SKILL.md) drives the originating
+manual conversation through design and PR waits using the host's recurring
+prompt capability (five minutes). It does not launch a CLI worker or contain
+its own ADO client. [`work-item`](skills/work-item/SKILL.md) remains the shared
+stage table, with explicit live, unattended inline and persistent origins.
+
+| Module | Role |
+|---|---|
+| [approval.ts](scripts/lib/approval.ts) | Design target identity and pending-feedback guards shared by all modes. |
+| [liveWatch.ts](scripts/lib/liveWatch.ts) | Validated item-local live-watch records and 15-minute reservation eligibility. |
+| [liveContinuation.ts](scripts/lib/liveContinuation.ts) | Owner-checked lifecycle, interaction receipts, publication and sequential child selection. |
+
+`live-prepare`, `live-bind`, `live-enter`, `live-finish`, `live-suspend`,
+`live-stop` and read-only `live-info` expose the watch lifecycle. `live-interaction`
+records version-bound chat input, `live-recorded` binds confirmed ADO comment
+receipts, and `live-child` chooses from a complete refreshed child snapshot.
+`design-feedback-info` recovers interrupted feedback receipts under current
+ownership; `design-feedback-recorded` reconciles confirmed ADO comments without
+requiring the retired live key; `design-feedback-consume` records how the
+feedback was incorporated or forwarded. `design-role` records the currently
+observed owned/shared design driver without discarding ownership history.
+`design-request-check` preflights publication before external effects, and
+`design-request` rechecks and publishes a newer approval cutoff. Neither
+publication nor background approval may discard unconsumed feedback.
+Host schedule creation/
+cancellation and ADO calls stay in the skill. No local file claims a timer
+exists without a successful host bind.
+
+Interrupted checks/arming recover through normal operation-lock acquisition,
+never by overriding a fresh owner or persistent worker claim. Restoration
+reconciles the exact host prompt before reusing or replacing a timer; terminal
+items cancel their own monitor even when another operation holds item state.
+
+Success renews waiting priority; read failure preserves its previous deadline.
+Fresh operation locks protect actual actions; stale generations cannot reenter.
+Worker claims are never overridden. Setup and ordinary acquisition defer
+unexpired live reservations; expired/stopped metadata alone does not create
+a permanent lock. Pending feedback remains durable across takeover, while
+nonowning shared-design waiters do not gain publication rights.
 
 ### Automation decision log
 
@@ -78,6 +120,7 @@ Other arguments retain the existing JSON CLI behavior.
 | [setupPrompt.ts](scripts/lib/setupPrompt.ts) | Line-oriented terminal IO, cancellation and concrete input examples. |
 | [setup.ts](scripts/lib/setup.ts) | Add/Edit/Remove collection loops, Add-another prompts and final review/save. |
 | [discovery.ts](scripts/lib/discovery.ts) | Escaped scoped discovery queries, independent assignment queries and paging validation. |
+| [worktreePaths.ts](scripts/lib/worktreePaths.ts) | `worktree-path` reserves a short item path under init-selected worktreeRoot; verifies nonoverlap with source/artifacts/other items. |
 
 Only numeric config `schemaVersion: 2` is supported; other versions are rejected.
 Projects require explicit `watchScopes`; empty means no discovery. Custom
@@ -272,7 +315,12 @@ stateDiagram-v2
 3. If the governing work item is inactive, the item goes to `paused` (from any stage except `tracked`, `awaiting-parent` and `paused`). A `paused` item goes back to `resumeStage` once it's active again. A `tracked` item whose work item is active goes to `new`.
 4. `awaiting-parent` pauses if reassigned, Completed or Removed. Otherwise a parent moves it to `new` if active, or `tracked` if inactive.
 5. `awaiting-answers` with a human comment newer than `hld.roundPostedAt` goes to `answers-received`.
-6. `awaiting-approval` goes to `approved` if the HLD task moved to Completed after `hld.approvalRequestedAt`. Otherwise the latest human comment after the request decides: one starting with "approved" means `approved`; anything else means `answers-received`.
+6. `awaiting-approval` accepts a fresh design-task Completed transition unless
+   later human feedback supersedes it, or an unconditional latest approval
+   comment after `hld.approvalRequestedAt`. Accepted comments are `approved`
+   or `approved, ship it` with optional `.`/`!`; conditions/changes require
+   revision. Accepted pending feedback gates advancement until a newer request
+   is published. Feature self-ID fallback cannot approve by Feature completion.
 7. Any stage from `approved` to `pr-ready`, and a Feature at `awaiting-pbis`, goes to `answers-received` if its design task, closed by ASDF (`hld.closedAt`), is back in Proposed or InProgress. The reason is `HLD reopened`, or `breakdown reopened` for a Feature.
 8. `awaiting-pbis` goes to `pbis-done` when the signals list the Feature's PBIs and every one is Completed or Removed.
 9. An abandoned PR blocks an eligible item with a PR, including `pr-feedback` and `pr-ready`, without repeatedly resetting an existing blocker. For `pr-open` or `merging`:
@@ -387,7 +435,7 @@ A skill is invoked as `asdf:<name>`, where `<name>` is its folder. Its frontmatt
 | [`brainstorming`](skills/brainstorming/SKILL.md) | The HLD. Does the deep dive into the code, drafts the HLD, asks question rounds, records decisions with provenance, runs the [builder check](skills/brainstorming/builder-check-prompt.md) and the [code check](skills/brainstorming/code-check-prompt.md), and requests approval. | Adapted |
 | [`feature-breakdown`](skills/feature-breakdown/SKILL.md) | Breaks a Feature into PBIs: its requirements, and the PBIs in order, with question rounds and approval on a Breakdown task and a [breakdown check](skills/feature-breakdown/breakdown-check-prompt.md). Creates the PBIs, and closes the Feature once they're finished. Also makes a large PBI into a Feature. | ASDF |
 | [`writing-plans`](skills/writing-plans/SKILL.md) | After approval: `plan.md`, planning decisions (`P<n>`) and the implementation tasks. | Adapted |
-| [`using-git-worktrees`](skills/using-git-worktrees/SKILL.md) | The item's worktree under the asdf-context, on its branch (`repo.branch`), made from the item's workspace. Runs the baseline build and test. | Adapted |
+| [`using-git-worktrees`](skills/using-git-worktrees/SKILL.md) | The item's recorded worktree, on its branch (`repo.branch`), made from its workspace under the init-selected short root. Runs baseline build/test. | Adapted |
 | [`subagent-driven-development`](skills/subagent-driven-development/SKILL.md) | Implements the plan: a fresh implementer subagent per task and a review after each. Uses the [implementer](skills/subagent-driven-development/implementer-prompt.md), [task reviewer](skills/subagent-driven-development/task-reviewer-prompt.md) and [re-review](skills/subagent-driven-development/re-review-prompt.md) prompts. | Adapted |
 | [`executing-plans`](skills/executing-plans/SKILL.md) | The same, inline, when subagents can't be dispatched. | Adapted |
 | [`test-driven-development`](skills/test-driven-development/SKILL.md) | Every code change starts with a failing test. | Copied |
@@ -517,7 +565,7 @@ Conventions:
   asdf.config.json               orgs, MCP servers, projects, work item types, workspaces, user name, limits
   memory\org-<org>\project-<project>\repo-<repo>.md
                                 one entry per merged item, scoped to the full repository identity
-  worktrees\<id>-<slug>\         the item's git worktree, on branch user/<userName>/<id>-<slug>
+  # The item's code worktree is elsewhere: <worktreeRoot>\<six-character-name>
   <id>-<slug>\                   one folder per work item
     state.json                   stage, ADO ids, HLD times, blocker, stats
     .lock                        present while a pass works on the item
@@ -546,7 +594,7 @@ Conventions:
 | `sdd\` | the CLI, driven by `subagent-driven-development` or `executing-plans` |
 | `reviews\` | `requesting-code-review` |
 | Qualified `memory-path` result | `finishing-a-development-branch`, at close-out. `brainstorming` reads it. Legacy name-only entries require identity verification before reuse. |
-| `worktrees\` | `using-git-worktrees`. Removed at close-out. |
+| `<worktreeRoot>\<short-name>` | `worktree-path` reserves it; using-git-worktrees creates it. Removed at close-out only after ownership/merge checks. |
 
 The memory path encodes lowercase org, project and repo independently, with safe prefixes and escaped dots/separators. `memory-path` is the authority for its spelling. Repository names can repeat across projects; work-item folders remain numeric-id keyed with explicit cross-org collision rejection.
 
@@ -560,7 +608,7 @@ The memory path encodes lowercase org, project and repo independently, with safe
 | `size` | For a PBI or User Story: `one` once its size check found it fits one PR, or you chose to keep it whole; `phase` when it's one of a Feature's PBIs. Empty until checked. |
 | `ado` | `parentId`, `hldId` (the design task: an HLD task, or a Feature's Breakdown task), `hldOwned`, `reviewId`, `implIds`, `prId`, and for a Feature `pbis`: each of its PBIs as `{id, waitsFor}`. |
 | `repo` | The repo's `name`, `org` and `project`, and `clonePath`, the workspace holding it (all set by `item-repo`); `worktreePath`; and `branch` (`user/<userName>/<id>-<slug>`, set by `item-new`; none for a Feature). |
-| `hld` | `version`, and the times the signal rules compare comments against (`roundPostedAt`, `approvalRequestedAt`, `closedAt`), plus `approvedBy` and `approvedAt`. |
+| `hld` | `version`, signal cutoffs (`roundPostedAt`, `approvalRequestedAt`, `closedAt`), `approvedBy`, `approvedAt`, observed `designDriver`, and optional `pendingFeedback` with target, provenance, recording, consumption and delegation timestamps. |
 | `blocker` | The open blocker's `workItemId`, `commentAt` and `reason`. |
 | `stats` | `stageEnteredAt` for each stage, `questionRounds` and `prRounds`. |
 

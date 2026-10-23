@@ -13,6 +13,12 @@ Reuse the operation owner from `asdf:using-asdf`. Before modes 1 or 2 push or mu
 
 Before builds, repairs, commits or pushes, refresh the verified execution context and follow `asdf:using-asdf`'s Code execution context contract. Use codeRoot cwd and validated absolute edit paths; keep reports in artifactRoot. Do not substitute the original checkout when the item worktree is missing or wrong.
 
+When origin live is supplied, return external pr-open/merging waits to
+`asdf:live-continuation` for same-session polling. Chat approval cannot supply
+a PR vote or bypass checks. After close-out, return to the live controller for
+watch cleanup and any approved Feature child handoff. Unattended runs retain
+their existing return behavior and never create live watches.
+
 ## Mode 1: open the PR (from stage `self-review`)
 
 1. **Run the full test suite** in the worktree, through the repo's own test skills when it has them. Don't open a PR on red. Diagnose and repair failures directly with `asdf:systematic-debugging` and TDD, not by redispatching a completed plan. This also applies to small Tasks with no plan. Record each attempt and result in `<item>\reviews\full-suite-repair.md`, retaining the count across passes. Allow at most two repair attempts; if still red, post a blocker and set `stage -Stage blocked -Reason "<failure>"`. Stop rather than re-running reviews every hour. Reset the count only after green or an explicit human reply authorizing another repair cycle. After repair commits, self-review the changed range before continuing.

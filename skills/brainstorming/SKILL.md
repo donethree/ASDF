@@ -19,6 +19,12 @@ Use the CLI (`asdf.ts`) for state and `asdf:ado-work-items` for every ADO read, 
 
 Acquire or reuse the item operation lock from `asdf:using-asdf`, including direct live answer sessions. Carry its owner through handoffs; heartbeat immediately after each user answer, before recording it.
 
+Preserve an explicitly supplied origin live/thread/root context. If returning
+from an external live wait, reacquire through `asdf:live-continuation` first;
+the old operation owner was released while waiting. All live-protected CLI
+mutations carry the current Owner. Unattended/background entry never creates
+a live schedule.
+
 ## What people said vs. what you guessed
 
 Keep them apart everywhere. What a person chose is a decision by that person. What you chose is an ASDF assumption until the HLD is approved. Never present a guess as something someone said.
@@ -33,7 +39,37 @@ A driver is an independent item with `hldOwned:true`. Non-owning waiters and leg
 
 For a newly tracked PBI, check whether a standalone child already has design or implementation work in progress. Preserve that child workflow. Before planning overlapping parent work, post a blocker on the parent and wait for the child to finish or for the scopes to be explicitly separated. On resumption, account for its shipped changes instead of rebuilding them.
 
-**Shared-design path.** Read the owner's latest design and replies, but never upload a revision, replace its description, close/reopen its task or approve it by proxy. At `answers-received`, record the reply locally; if clarification of this item's proposal is needed, use `hld-proposal` once. Set `hld.approvalRequestedAt` to the latest consumed human comment's timestamp so it isn't processed again. If no reply was consumed, keep the existing cutoff, or initialize it to now when absent. Return to `awaiting-approval` and stop on every shared-design entry. No new version is created. Fresh approval is detected through signals under the held lock. In a live session, direct the person to the shared design's approval rather than changing its state.
+**Pending feedback, in every mode.** Before revising, changing design roles or
+publishing, run `asdf.ts design-feedback-info -Id <id> -Owner <owner>`.
+It returns the pending marker and, for session feedback, the receipt with its
+author/summary; it also repairs a receipt-only interrupted write. Read that
+content even when ADO has no new non-ASDF comments. If `recordedAt` is absent,
+read complete ADO comments and reuse the comment referencing this interactionId,
+or post `session-feedback` once and confirm its ID. Then run
+`design-feedback-recorded -Id <id> -Owner <owner> -InteractionId <receipt> -CommentId <confirmed id>`.
+These commands work under a fresh background owner after the live watch stops;
+do not reuse the retired watch key or create a timer. Failed reconciliation
+stops publication, not feedback retention.
+
+**Shared-design path.** Read the owner's latest design and replies, but never
+upload a revision, replace its description, close/reopen its task or approve it
+by proxy. Record replies and any pending receipt locally with their actual
+provenance. Forward this item's unresolved proposal using `hld-proposal` once,
+reusing a prior matching comment on retry. After confirming that the owner has
+the pending feedback, acknowledge its forwarding with
+`design-feedback-consume -Id <id> -Owner <owner> -FeedbackId <pending.feedbackId> -Summary "<what was forwarded and where>"`.
+Set the cutoff to the latest consumed human reply, preserving any later existing
+cutoff; initialize it to now only if absent. Then run
+`design-role -Id <id> -Owner <owner> -Mode shared`. This preserves historical
+`hldOwned` and the feedback receipt, marks delegation, and binds approval to a
+cutoff no earlier than the recorded feedback. Return to `awaiting-approval`.
+No new version is published; only fresh owner approval through signals can
+continue. In live mode return to live-continuation to monitor the shared task.
+
+For an existing design this item may currently drive, run
+`design-role -Id <id> -Owner <owner> -Mode owned` after the ownership check and
+receipt reconciliation. Reassignment back to you requires this fresh check;
+historical `hldOwned` alone is not current authority.
 
 - **No HLD yet:** create the HLD and Review tasks together (`asdf:ado-work-items`), store their ids with `"hldOwned":true`, and move the HLD task into the `InProgress` category.
 - **An HLD task assigned to you, not Completed, and not driven by another independent item in this org:** it's yours to drive. Store its id with `"hldOwned":true`, create the Review task only if this item has none, and design as below.
@@ -161,6 +197,13 @@ This also covers a session started just to answer an open round.
 3. Post the `session-answers` comment on the HLD task, so ADO keeps the record.
 4. Continue: recheck design ownership, revise the HLD (step 3), then ask the next round or run the checks (step 8). Retain the same operation owner through approval and implementation; the top-level entry releases it when the operation ends.
 
+If the person elects to answer later/in ADO, post the question round with its
+cutoff, enter awaiting-answers and return to live-continuation to arm the wait.
+Cancelling a question form is not permission to start an unattended flow.
+Do not use a blocking ask_user form just to await an approval already requested.
+Feedback/approval arriving after an external wait uses live-continuation's
+version-bound receipt path rather than directly applying the old chat snapshot.
+
 ## 6. Unattended run (`do-next`)
 
 - Post the `question-round` comment on the HLD task. Post one comment per round.
@@ -170,7 +213,11 @@ This also covers a session started just to answer an open round.
 
 ## 7. Answers arrived (stage `answers-received`)
 
-1. **Read the replies.** Take the human comments on the HLD task, meaning those not starting with `[ASDF]`, newer than `hld.roundPostedAt`. If the replies came after an approval request, read the ones newer than `hld.approvalRequestedAt` instead.
+1. **Read the replies.** First reconcile and read pending feedback as in step 1,
+   including the session receipt's author/summary. Also take human comments on
+   the HLD task, meaning those not starting with `[ASDF]`, newer than
+   `hld.roundPostedAt` (or `hld.approvalRequestedAt` after an approval request).
+   The `[ASDF]` filter does not discard receipt-backed session feedback.
 2. **Map them to questions:**
    - `Q1 A, Q2 B` answers those questions.
    - "go with your recommendations" accepts every recommendation still open in that round.
@@ -179,7 +226,11 @@ This also covers a session started just to answer an open round.
 4. **The size question.** If it was answered: A means follow "Making a PBI into a Feature" in `asdf:feature-breakdown`, then stop. B means write `{"size":"one"}` with `item-set`, record "Keep it as one PBI" as a `D` row, and carry on with the deep dive (step 2), then step 3. In a live session, do the same with the session's provenance.
 5. **Never assume an answer.** An unanswered question stays open. Never quietly assume an answer to a question you asked; ask it again in the next round.
 6. **A change request after an approval request** counts as answers. Revise and carry on.
-7. **Next step.** Revise `hld.md` (step 3). If anything is still open, go to step 4 for the next round; otherwise go to step 8.
+7. **Next step.** Revise `hld.md` (step 3). Once the pending feedback is reflected
+   in the draft and questions/decisions, run
+   `design-feedback-consume -Id <id> -Owner <owner> -FeedbackId <pending.feedbackId> -Summary "<changes or explicit open questions recorded>"`.
+   A recorded ADO comment alone is not consumption. If anything is still open,
+   go to step 4 for the next round; otherwise go to step 8.
 
 ## 8. Builder check and code check
 
@@ -198,20 +249,40 @@ Run the builder check before requesting approval. Run the code check with the bu
 
 ## 9. Nothing open: request approval
 
-1. Before requesting approval, move a Completed HLD task back to InProgress. Then marking it Done approves this version.
-2. Bump the version: copy `hld.md` to `hld.v<N>.md`. Upload and link it, and set the HLD task description from the `hld-description` template (`asdf:ado-work-items`).
-3. Post the `approval-request` comment. It counts the decisions made by people and the assumptions made by ASDF, giving the assumptions' D-numbers.
-4. Write `{"hld":{"version":<N>,"approvalRequestedAt":"<utc now>"}}` with `item-set`, then run `asdf.ts stage -Id <id> -Stage awaiting-approval`.
+1. Recheck current design ownership and reconcile/consume pending feedback.
+   Before any upload, description change or approval comment, capture the
+   current design target from item state as
+   `{"designId":<ado.hldId>,"version":<old version>,"requestedAt":<old approvalRequestedAt or null>,"roundPostedAt":<round cutoff or null>}`.
+   Run `asdf.ts design-request-check -Id <id> -Owner <owner> -File "<old-target.json>" -Version <N> -RequestedAt "<candidate utc cutoff>"`.
+   A failed preflight means no external publication; resolve its reported cause.
+2. Before requesting approval, move a Completed HLD task back to InProgress.
+   Bump the version: copy `hld.md`
+   to `hld.v<N>.md`, upload/link it, and set the `hld-description`. On retry,
+   reconcile already completed uploads/comments instead of duplicating them.
+3. Post the `approval-request` comment. It counts human decisions and ASDF
+   assumptions, giving the assumptions' D-numbers. Confirm its timestamp.
+4. Publish with `asdf.ts design-request -Id <id> -Owner <owner> -File "<old-target.json>" -Version <N> -RequestedAt "<confirmed approval-request timestamp>"`.
+   This rechecks the target, atomically enters awaiting-approval and clears
+   only recorded, consumed feedback superseded by this version. Never clear
+   pendingFeedback by hand.
+5. In live mode return to `asdf:live-continuation` to arm a five-minute check
+   and release the operation lock. Unattended entry returns to its caller as
+   before, without creating a schedule.
 
-Approval itself is detected by `asdf.ts signals`: the HLD task marked Done after the request, or a comment starting with "approved". Never judge it yourself.
+Approval itself is detected by `asdf.ts signals`: a fresh design-task Done
+transition or an unconditional approval comment. Plain `approved` (optional
+terminal punctuation) and `approved, ship it` are accepted; conditional or
+mixed change requests are feedback. Later feedback supersedes an earlier Done.
+Pending revision blocks old approval in every mode. Never judge it yourself.
 
 ## 10. Approval in a live session
 
-If the user approves in the session:
-
-1. Post the `session-approval` comment and move the HLD task to the `Completed` category.
-2. Write `{"hld":{"approvedBy":"<name> (session)","approvedAt":"<utc now>","closedAt":"<utc now>"}}` with `item-set`.
-3. Run `asdf.ts stage -Id <id> -Stage approved`, then continue with `asdf:writing-plans`.
+Use `asdf:live-continuation` for current-target chat approval and feedback:
+acquire fresh ownership, suspend the old scheduled generation, create a receipt,
+record its ADO session template and verified comment ID, then immediately
+continue `asdf:writing-plans` for an HLD. A failed post is not approval.
+Never approve shared/nonowned designs by proxy or apply a chat approval to a
+newer version than the one presented. No separate "continue" prompt is needed.
 
 ## `decisions.md`
 

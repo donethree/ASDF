@@ -33,7 +33,7 @@ describe('public ASDF launcher', () => {
     const context = join(home, 'context');
     const repo = newWorkspace(join(home, 'Payments'), 'https://dev.azure.com/contoso/Commerce/_git/Payments');
     const settings = join(home, '.copilot', 'asdf', 'settings.json');
-    const answers = [context, '1', 'contoso', 'n', '1', 'contoso/Commerce', 'n',
+    const answers = [context, process.platform === 'win32' ? 'C:\\w' : '/tmp/w', '1', 'contoso', 'n', '1', 'contoso/Commerce', 'n',
       '1', repo, 'n', '1', 'contoso/Commerce', 'n', 'n', '4', 'jdoe', '', 'y', '1'];
     const result = spawnSync(process.execPath, [join(REPO, 'asdf.js'), '--init'], {
       env: { ...process.env, HOME: home, USERPROFILE: home, ASDF_SETTINGS: settings },

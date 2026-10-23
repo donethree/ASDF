@@ -5,6 +5,7 @@ import { identity, listRuns, readBinding, runPath, sessionPath,
   type ErrorInfo, type ItemIdentity, type SessionBinding, type WorkerRun } from './sessions.ts';
 import { readWorkerClaim, withItemGuard, workerNeedsRecovery } from './workerLease.ts';
 import { fail } from './util.ts';
+import { assertLiveMutation, readLiveWatch, type LiveWatch } from './liveWatch.ts';
 
 export type SessionStatus = {
   schemaVersion: 1; item: ItemIdentity; title: string; stage: string;
@@ -12,6 +13,7 @@ export type SessionStatus = {
   waiting: { reason: string; targetUrl: string | null } | null;
   transcriptPath: string | null; transcriptExportedAt: string | null;
   liveEventsPath: string | null; error: ErrorInfo | null;
+  liveWatch: LiveWatch | null;
 };
 
 export function getSessionStatus(id: number): SessionStatus {
@@ -57,7 +59,7 @@ export function getSessionStatus(id: number): SessionStatus {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
   }
   return { schemaVersion: 1, item: identity(id), title: String(item.title), stage: String(item.stage),
-    observedAt: new Date().toISOString(), lastSyncedAt, binding, latestRun, waiting, transcriptPath, transcriptExportedAt,
+    observedAt: new Date().toISOString(), lastSyncedAt, binding, latestRun, waiting, transcriptPath, transcriptExportedAt, liveWatch: readLiveWatch(id),
     liveEventsPath: claim ? runPath(id, claim.runId, 'events.jsonl') : null,
     error: claim && workerNeedsRecovery(claim)
       ? { code: 'ASDF_SESSION_RECOVERY_REQUIRED', message: 'Unfinished worker requires operator investigation; verify all processes stopped before recovery.' }
@@ -69,13 +71,15 @@ export function refreshSessionStatus(id: number, syncedAt?: string, owner?: stri
     const claim = readWorkerClaim(id);
     if (claim && claim.owner !== owner) fail('ASDF_LOCK_NOT_OWNER', 'cannot rewrite status for another worker');
     const status = getSessionStatus(id);
-    if (!status.binding) return status;
+    if (!status.binding && !status.liveWatch) return status;
+    assertLiveMutation(id, owner);
     if (syncedAt !== undefined) { check(time(syncedAt), 'invalid sync time'); status.lastSyncedAt = syncedAt; }
     const escape = (s: string) => s.replace(/[\r\n]+/g, ' ').replace(/([\\`*_{}[\]<>])/g, '\\$1');
     const lines = [
       `# ${escape(status.title)} (${id})`,
       '', `Stage: ${status.stage}`, `Observed: ${status.observedAt}`, `Last ADO sync: ${status.lastSyncedAt ?? 'not recorded'}`,
-      `Session: ${status.binding.sessionId}`, `Name: ${escape(status.binding.name)}`,
+      `Session: ${status.binding?.sessionId ?? 'interactive conversation'}`, `Name: ${escape(status.binding?.name ?? status.title)}`,
+      `Live watch: ${status.liveWatch?.status ?? 'none'}`, `Live priority expires: ${status.liveWatch?.expiresAt ?? '-'}`,
       `Latest run: ${status.latestRun?.state ?? 'not started'}`,
       `Run started: ${status.latestRun?.startedAt ?? '-'}`, `Run ended: ${status.latestRun?.endedAt ?? '-'}`,
       `Waiting: ${escape(status.waiting?.reason ?? 'not waiting')}`,

@@ -6,6 +6,7 @@ import { STAGES } from './items.ts';
 import { prepareConfig, settingsPath, validateContextPath, withSettingsGuard } from './settings.ts';
 import { configRecord, DEFAULT_TYPES, normalizeConfig, type AsdfConfig } from './watchScopes.ts';
 import { fail, same } from './util.ts';
+import { isLiveReserved, parseLiveWatch } from './liveWatch.ts';
 
 export type SetupPaths = { settingsFile: string; mcpFile: string; copilotSettingsFile: string };
 export type FileSnapshot = { path: string; content: string | null };
@@ -166,6 +167,10 @@ function dependencies(context: string): Dependency[] {
     }
     if (existsSync(join(folder, '.lock')) || existsSync(join(folder, 'session', 'active-run.json'))) {
       fail('ASDF_SETUP_IN_USE', `item ${state.id} has an active or unresolved operation; finish or recover it before saving setup`);
+    }
+    const live = setupStore.read(join(folder, 'live-watch.json'));
+    if (live !== null && isLiveReserved(parseLiveWatch(record(live, 'live-watch.json'), { id: state.id, org: state.org, project: state.project }))) {
+      fail('ASDF_SETUP_IN_USE', `item ${state.id} is reserved by an interactive session`);
     }
     if (state.stage !== 'done') result.push({ id: state.id, stage: state.stage, org: state.org, project: state.project,
       repo: configRecord(state.repo, 'item repo') });

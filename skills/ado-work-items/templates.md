@@ -15,7 +15,7 @@ Reply like "Q1 A, Q2 B" or "go with your recommendations", or answer in a Copilo
 
 ## approval-request
 [ASDF] {design} v{version} is ready for approval: {people} decision(s) by people, {assumptions} assumption(s) by ASDF ({ids}). Full design: {attachment}. @{assignee}
-Reply with a comment starting with "approved", or mark this task Done.
+Reply with "approved", or mark this design task Done. Conditional approval or requested changes require revision.
 {Only for a revised breakdown: PBIs that have started and whose scope this version changes: {ids}. PBIs this version drops, for you to remove: {ids}.}
 
 ## session-answers
@@ -23,6 +23,11 @@ Reply with a comment starting with "approved", or mark this task Done.
 
 ## session-approval
 [ASDF] {design} v{version} approved by {name} in a Copilot session.
+Reference: {interactionId}.
+
+## session-feedback
+[ASDF] Feedback on {design} v{version}, given by {name} in a Copilot session: {summary}.
+Reference: {interactionId}.
 
 ## blocker
 [ASDF] Blocked: {reason}. What I need: {ask}. Reply here and I'll pick it up on the next run. @{assignee}
@@ -34,10 +39,10 @@ Reply with a comment starting with "approved", or mark this task Done.
 [ASDF] This task needs a parent PBI before I can start (it's complex: {reason}). Please parent it to the right PBI. @{assignee}
 
 ## hld-update
-[ASDF] Updated the HLD to v{version} for task {taskId}: {why}. Reply with a comment starting with "approved" to accept the update. @{owner}
+[ASDF] Updated the HLD to v{version} for task {taskId}: {why}. Reply "approved" to accept the update, or explain what needs revision. @{owner}
 
 ## hld-proposal
-[ASDF] Task {taskId} needs a change to this HLD that I won't make on my own: {proposal}. Reply with a comment starting with "approved" to accept it, or tell me what to change. @{owner}
+[ASDF] Task {taskId} needs a change to this HLD that I won't make on my own: {proposal}. Reply "approved" to accept it, or tell me what to change. @{owner}
 
 ## final-summary
 [ASDF] Merged in PR {prId}. Closed: {closedIds}. As-built notes: {notes}.

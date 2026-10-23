@@ -18,6 +18,13 @@ task claims are not authority. The Node runner owns the lock lifecycle;
 nested skills never unlock that governing item or recursively dispatch workers.
 This exception changes orchestration, not the ADO, approval or code-root rules.
 
+**Live continuation:** direct manually started item work preserves origin live,
+threadId and rootItemId through skill handoffs. At design/PR waits use
+`asdf:live-continuation` for five-minute same-session checks, chat approval/
+feedback and safe resumption. A scheduled prompt for an existing live watch
+keeps that live origin. do-next, persistent workers and subagents never arm
+these watches. A missing host scheduler is reported, not silently substituted.
+
 ## The rules
 
 1. No work starts without a Feature, PBI, User Story, or Task. Large work is a Feature, broken into PBIs that each get their own HLD and PR (`asdf:feature-breakdown`).
@@ -36,6 +43,7 @@ This exception changes orchestration, not the ADO, approval or code-root rules.
 | The user asks to work on, build, fix, or change something | `asdf:intake` |
 | "do next", "make progress", or an automation run | `asdf:do-next` |
 | A runner-supplied worker request or an inline item handoff from do-next | `asdf:work-item` |
+| A registered live-check prompt, live approval/feedback, or manual rejoin of a watched item | `asdf:live-continuation` |
 | "Answer the open questions for <id>" | `asdf:brainstorming` |
 | ASDF isn't initialized, or its settings should change | Tell the user to run the manual setup command shown in session context, then stop; setup is not a skill |
 | Any ADO read or write | `asdf:ado-work-items` |
@@ -84,6 +92,13 @@ An unfinished persistent worker claim also excludes live/inline operations
 and sync, even after the ordinary lease ages. Never remove that claim or
 reuse its owner to bypass a deferred lock. The runner and work-item skill
 perform the protocol for persistent entry; the runner alone finalizes it.
+
+An unexpired interactive watch also reserves its item. Ordinary lock acquisition
+defers to it; the matching live controller uses live-enter with a fresh owner,
+not a borrowed token/owner from old chat. While live-protected, include Owner
+on item-set, item-repo, stage, ledger-add and task-brief. Wait reservations expire
+after 15 minutes without successful required reads; existing active operation
+locks and persistent claims retain their own rules.
 
 1. Generate an operation owner with `node -e "console.log(crypto.randomUUID())"` and run `asdf.ts lock -Id <id> -Owner <operation owner>`. If `acquired` is false, leave the item untouched and report it deferred.
 2. Pass the same owner through skill handoffs. Nested skills reuse the held lock; they never generate another owner. At entry, before mutations, between long steps, and immediately after a user answer, run `asdf.ts heartbeat -Id <id> -Owner <operation owner>`.

@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, readFileSync, realpathSync, symlinkSync, writeFi
 import { join } from 'node:path';
 import { beforeEach, describe, it } from 'node:test';
 import * as execution from '../scripts/lib/execution.ts';
-import { newItem, setItem } from '../scripts/lib/items.ts';
+import { newItem, setItem, setItemStage } from '../scripts/lib/items.ts';
 import { unlockItem } from '../scripts/lib/lock.ts';
 import { reviewPackage, taskDone, taskStart } from '../scripts/lib/sdd.ts';
 import { getConfig, setConfig } from '../scripts/lib/settings.ts';
@@ -105,6 +105,26 @@ describe('item execution context', () => {
   it('does not treat the original checkout as the item worktree', () => {
     setItem(201, { repo: { worktreePath: work.workspace } });
     assert.equal(packet().json.error, 'ASDF_EXECUTION_CONTEXT');
+  });
+  it('accepts its registered worktree outside the ASDF context folder', () => {
+    const outside = join(newFolder('external-worktree'), 'w');
+    git('-C', work.workspace, 'worktree', 'move', work.repo, outside);
+    setItem(201, { repo: { worktreePath: outside } });
+    const result = packet();
+    assert.equal(result.code, 0, JSON.stringify(result.json));
+    assert.equal(result.json.codeRoot, outside);
+    assert.equal(pathCheck(join(outside, 'new.ts')).code, 0);
+    assert.equal(pathCheck(join(work.workspace, 'new.ts')).json.error, 'ASDF_CODE_PATH');
+  });
+  it('does not depend on historical worktree drives being available', { skip: process.platform !== 'win32' }, (t) => {
+    const drive = 'ZYXWVUTSRQPONMLKJIHGFED'.split('').map(c => `${c}:\\`).find(p => !existsSync(p));
+    if (!drive) { t.skip('no absent drive available'); return; }
+    newItem({ id: 202, org: 'contoso', project: 'Storage', kind: 'parent', type: 'User Story', title: 'Historical' });
+    setItem(202, { repo: { worktreePath: join(drive, 'w', 'abc123') } });
+    setItemStage(202, 'done');
+    assert.equal(packet().code, 0);
+    setItemStage(202, 'new');
+    assert.equal(packet().code, 0);
   });
 
   it('rejects an unrelated checkout placed at the expected worktree path', () => {

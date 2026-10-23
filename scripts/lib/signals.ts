@@ -2,6 +2,8 @@
 import { getItem, setItem, setItemStage } from './items.ts';
 import { heartbeat, isLocked } from './lock.ts';
 import { isFalse, isTrue, now, oneOf, parseTime, prop, same, stamp, toList, type Json } from './util.ts';
+import { designTarget, designRevisionBlocks, pendingDesignRevision } from './approval.ts';
+import { readDesignFeedback } from './liveContinuation.ts';
 
 const ACTIVE = ['InProgress', 'Resolved'];
 const ACTIVE_PARENTLESS_TASK = ['Proposed', 'InProgress', 'Resolved'];
@@ -36,7 +38,7 @@ export function isMarkedComment(text: unknown): boolean {
 }
 
 export function isApprovalText(text: unknown): boolean {
-  return !isMarkedComment(text) && /^approved\b/i.test(plainText(text));
+  return !isMarkedComment(text) && /^approved(?:,\s*ship it)?[.!]*$/i.test(plainText(text));
 }
 
 function createdAt(comment: Json): number {
@@ -123,22 +125,34 @@ export function getTransition(state: Json, signals: Json, at?: string | Date): T
   }
 
   // 7. Approval: the HLD task moved to Completed after the request, or the latest human comment after the request starts with "approved".
+  if (designRevisionBlocks(state) && oneOf(stage, ['awaiting-approval', 'approved', 'implementing', 'self-review', 'pr-open', 'pr-ready'])) {
+    return go('answers-received', 'design revision pending');
+  }
   if (same(stage, 'awaiting-approval')) {
-    if (same(prop(hldSignal, 'stateCategory'), 'Completed')) {
+    const delegated = prop(stateHld, 'designDriver') === 'shared' && pendingDesignRevision(state)?.delegatedAt;
+    const after = humanCommentsAfter(prop(hldSignal, 'comments'), prop(stateHld, 'approvalRequestedAt'));
+    const latest = after.at(-1);
+    const changed = parseTime(prop(hldSignal, 'stateChangedAt'));
+    const feedbackAfterCompletion = latest && !isApprovalText(prop(latest, 'text'))
+      && (!changed || createdAt(latest) >= changed.getTime());
+    const featureFallback = same(prop(state, 'kind'), 'feature') && prop(prop(state, 'ado'), 'hldId') === prop(state, 'id');
+    if (!featureFallback && !feedbackAfterCompletion && same(prop(hldSignal, 'stateCategory'), 'Completed')) {
       const requested = parseTime(prop(stateHld, 'approvalRequestedAt'));
-      const changed = parseTime(prop(hldSignal, 'stateChangedAt'));
       if (requested === null || (changed !== null && changed.getTime() >= requested.getTime())) {
-        return go('approved', 'HLD task completed', { hld: { approvedBy: 'state', approvedAt: stamp(time) } });
+        return go('approved', 'HLD task completed', { hld: { approvedBy: 'state', approvedAt: stamp(time), ...(delegated ? { pendingFeedback: null } : {}) } });
       }
     }
-    const after = humanCommentsAfter(prop(hldSignal, 'comments'), prop(stateHld, 'approvalRequestedAt'));
     if (after.length === 0) return none();
-    const latest = after[after.length - 1];
     if (isApprovalText(prop(latest, 'text'))) {
       const approvedAt = stamp(parseTime(prop(latest, 'createdAt')) ?? time);
-      return go('approved', 'approved in a comment', { hld: { approvedBy: prop(latest, 'author') ?? null, approvedAt } });
+      return go('approved', 'approved in a comment', { hld: { approvedBy: prop(latest, 'author') ?? null, approvedAt, ...(delegated ? { pendingFeedback: null } : {}) } });
     }
-    return go('answers-received', 'changes requested');
+    const target = designTarget(state);
+    const ownsRevision = prop(stateHld, 'designDriver') !== 'shared' && (prop(prop(state, 'ado'), 'hldOwned') === true || featureFallback);
+    return go('answers-received', 'changes requested', target && ownsRevision ? { hld: { pendingFeedback: {
+      feedbackId: `ado-${target.designId}-${prop(latest, 'createdAt')}`, target,
+      receivedAt: prop(latest, 'createdAt'), source: 'ado', recordedAt: stamp(time),
+    } } } : {});
   }
 
   // 8. A reopened design stops build work, up to the merge, and a reopened breakdown stops a Feature waiting on its PBIs.
@@ -184,9 +198,13 @@ export function getTransition(state: Json, signals: Json, at?: string | Date): T
 }
 
 export function invokeSignals(id: number, signals: Json, at?: string | Date, owner?: string): Json {
-  const state = getItem(id);
   if (owner !== undefined) heartbeat(id, owner, at);
-  else if (isLocked(id, at)) return { from: state.stage, to: state.stage, reason: 'locked by another pass', processed: false };
+  else if (isLocked(id, at)) {
+    const state = getItem(id);
+    return { from: state.stage, to: state.stage, reason: 'locked by another pass', processed: false };
+  }
+  readDesignFeedback(id, owner, at);
+  const state = getItem(id);
   const transition = getTransition(state, signals, at);
   if (transition.stage) {
     if (Object.keys(transition.patch).length > 0) setItem(id, transition.patch);

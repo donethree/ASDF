@@ -6,7 +6,7 @@ import { addMcpEntry, findMcpMatches, loadSetup, prepareSetupSave, saveSetup, se
 import { EXAMPLES, SetupBack, SetupCancelled, type SetupIO } from './setupPrompt.ts';
 import { configRecord, configText, type OrgConfig, type ProjectIdentity, type ProjectConfig, type WatchSource } from './watchScopes.ts';
 import { AsdfError, fail, same } from './util.ts';
-import type { Workspace } from './workspaces.ts';
+import { normalizeWorktreeRoot, type Workspace } from './workspaces.ts';
 
 export type SetupResult = { status: 'saved' | 'cancelled'; paths: string[] };
 
@@ -49,7 +49,7 @@ export async function runSetup(io: SetupIO, paths?: SetupPaths): Promise<SetupRe
   const plain = (value: string) => configText(value, 'entry');
   const context = async () => {
     for (;;) {
-      const input = await line('Context folder: designs, plans, questions, sessions and worktrees.\nExample: C:\\asdf-context (outside every Git repository).\nEnter the full folder path:', loaded.draft.contextPath || undefined);
+      const input = await line('Context folder: designs, plans, questions, sessions and logs.\nExample: C:\\asdf-context (outside every Git repository).\nEnter the full folder path:', loaded.draft.contextPath || undefined);
       try {
         const path = validateContextPath(input);
         const changed = !loaded.draft.contextPath || !sameSetupPath(path, loaded.draft.contextPath);
@@ -272,7 +272,12 @@ export async function runSetup(io: SetupIO, paths?: SetupPaths): Promise<SetupRe
       addMcpEntry(loaded.draft, org.org, name);
     }
   };
-  const sections = [context, organizations, projectSection, repositories, watchSection, types, username, mcp];
+  const worktrees = async () => {
+    config().worktreeRoot = await validated(
+      'Short worktree parent folder, separate from the context/artifact folder.\nExample: Q:\\w gives Q:\\w\\a1b2c3 (11 characters).\nEnter the parent folder for new worktrees. Full worktree paths must be at most 13 characters (fewer than 14).\nExisting recorded worktrees are not moved. Directory/tool permissions are not granted by setup.',
+      value => validateContextPath(normalizeWorktreeRoot(value)), config().worktreeRoot);
+  };
+  const sections = [context, organizations, projectSection, repositories, watchSection, types, username, mcp, worktrees];
   const section = async (index: number) => {
     try { await sections[index](); }
     catch (error) {
@@ -284,17 +289,20 @@ export async function runSetup(io: SetupIO, paths?: SetupPaths): Promise<SetupRe
   try {
     io.write('ASDF guided local setup\nNo model, ADO call or login is used. Examples are not saved defaults.\nType :back to return, :cancel or Ctrl+C to cancel. Nothing is written before Save.\n');
     for (const warning of loaded.pluginWarnings) io.write(`Warning: ${warning}\n`);
-    for (let i = 0; i < sections.length; i++) await section(i);
+    await section(0);
+    await section(8);
+    for (let i = 1; i < 8; i++) await section(i);
     for (;;) {
       let preview: SetupWritePlan | undefined;
       try {
+        if (!config().worktreeRoot) fail('ASDF_WORKTREE_ROOT_REQUIRED', 'choose a short worktree parent folder before saving');
         preview = prepareSetupSave(loaded);
         loaded = preview.loaded;
       } catch (error) {
         if (!(error instanceof AsdfError)) throw error;
         io.write(`Draft is not ready to save: ${error.message}\n`);
       }
-      io.write(`\nReview draft\nContext: ${loaded.draft.contextPath || '(required)'}\nUser: ${config().userName}\n`);
+      io.write(`\nReview draft\nContext: ${loaded.draft.contextPath || '(required)'}\nWorktree parent: ${config().worktreeRoot || '(required)'}\nUser: ${config().userName}\n`);
       for (const org of config().orgs) {
         io.write(`Organization: ${org.org}; MCP: ${org.mcpServer || '(not selected)'}\n`);
         for (const project of org.projects) io.write(`  Project: ${project.project}; watches: ${project.watchScopes.length}\n`);
@@ -302,7 +310,7 @@ export async function runSetup(io: SetupIO, paths?: SetupPaths): Promise<SetupRe
       for (const workspace of config().workspaces) io.write(`Repository: ${workspace.org}/${workspace.project}/${workspace.repo} - ${workspace.path}\n`);
       for (const watch of watches()) io.write(`Watch: ${watchLabel(watch)}\n`);
       io.write(`Types: ${JSON.stringify(config().workItemTypes)}\nFiles: ${loaded.paths.settingsFile}; ${join(loaded.draft.contextPath, 'asdf.config.json')}; ${loaded.paths.mcpFile}\n`);
-      const choice = await number('1) Save configuration\n2) Context\n3) Organizations\n4) Projects\n5) Repositories\n6) Backlogs/watches\n7) Types\n8) Branch user name\n9) MCP entries\n0) Cancel setup', 9);
+      const choice = await number('1) Save configuration\n2) Context\n3) Organizations\n4) Projects\n5) Repositories\n6) Backlogs/watches\n7) Types\n8) Branch user name\n9) MCP entries\n10) Worktree parent\n0) Cancel setup', 10);
       if (choice === 0) throw new SetupCancelled();
       if (choice !== 1) { await section(choice - 2); continue; }
       if (!preview) { io.write('Correct the draft before saving.\n'); continue; }

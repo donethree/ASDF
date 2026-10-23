@@ -1,14 +1,15 @@
 // Verified item-local execution roots. These checks do not grant host permissions or sandbox commands.
 import { lstatSync, readdirSync } from 'node:fs';
-import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { getItem, itemPath } from './items.ts';
+import { getItem } from './items.ts';
 import { isLocked } from './lock.ts';
-import { contextPath, getConfig } from './settings.ts';
+import { getConfig } from './settings.ts';
 import { fail, git, readJson, same, toList } from './util.ts';
 import { resolveWorkspace } from './workspaces.ts';
 import { artifactPath, inside, physical, stat } from './artifacts.ts';
 export { artifactPath } from './artifacts.ts';
+import { validateWorktreeLocation } from './worktreePaths.ts';
 
 export interface InstructionFiles {
   root: string[];
@@ -112,14 +113,8 @@ export function executionContext(id: number, owner: string, requestedRepoPath?: 
     same(w.org, repo.org) && same(w.project, repo.project) && same(w.repo, repo.name)
     && samePath(w.path, repo.clonePath));
   if (!configured) fail('ASDF_EXECUTION_CONTEXT', `item ${id}'s workspace is not configured`);
-  const expectedPath = join(contextPath(), 'worktrees', basename(itemPath(id)!));
-  if (!samePath(repo.worktreePath, expectedPath)) fail('ASDF_EXECUTION_CONTEXT', `worktree must be ${expectedPath}`);
   const workspaceReadRoot = physical(repo.clonePath, 'ASDF_EXECUTION_CONTEXT');
-  const codeRoot = physical(repo.worktreePath, 'ASDF_EXECUTION_CONTEXT');
-  const canonicalSlot = join(physical(contextPath(), 'ASDF_EXECUTION_CONTEXT'), 'worktrees', basename(itemPath(id)!));
-  if (!samePath(codeRoot, canonicalSlot) || inside(workspaceReadRoot, codeRoot)) {
-    fail('ASDF_EXECUTION_CONTEXT', 'the item worktree must be in ASDF context, outside the original checkout');
-  }
+  const codeRoot = validateWorktreeLocation(id, repo.worktreePath);
   if (requestedRepoPath !== undefined && (!isAbsolute(requestedRepoPath)
     || !samePath(physical(requestedRepoPath, 'ASDF_EXECUTION_CONTEXT'), codeRoot))) {
     fail('ASDF_EXECUTION_CONTEXT', `use item ${id}'s worktree, not ${requestedRepoPath}`);

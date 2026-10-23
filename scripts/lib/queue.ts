@@ -2,6 +2,7 @@
 import { STAGE_PRIORITY, getItems, itemPath, managedChildReason } from './items.ts';
 import { isLocked } from './lock.ts';
 import { readWorkerClaim, workerNeedsRecovery } from './workerLease.ts';
+import { isLiveReserved, readLiveWatch } from './liveWatch.ts';
 import { AsdfError, now, type Json } from './util.ts';
 
 function priorityOf(stage: unknown): number | undefined {
@@ -33,6 +34,7 @@ export function getQueueReport(at?: string | Date): {
         const claim = readWorkerClaim(item.id);
         deferred.push({ id: item.id, reason: claim && workerNeedsRecovery(claim)
           ? 'unfinished worker needs recovery; do not automatically relaunch'
+          : isLiveReserved(readLiveWatch(item.id), time) ? 'interactive session is watching this item'
           : 'item operation or unfinished worker is held' });
         continue;
       }

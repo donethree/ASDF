@@ -9,13 +9,28 @@ description: Use when an ASDF item's HLD is approved - writes the implementation
 
 This runs on its own once the HLD is approved (stage `approved`). Nobody is asked anything.
 
+Pending accepted feedback blocks planning until a revised request is published
+and approved, or a shared owner's fresh approval resolves delegated feedback.
+Preserve live origin/thread/root when supplied: continue the
+same conversation, not do-next or another CLI worker. The live controller owns
+wait scheduling; planning and its subagents never create their own watches.
+
 Reuse the caller's item operation owner (`asdf:using-asdf`), or acquire one for a direct entry. Carry it into implementation. On the standalone Task path, `item.md` defines the deliverable; the approved parent HLD supplies constraints, not additional work. Scope every task and the spec-coverage self-review to that deliverable.
 
 For a PBI with an already-started standalone child, do not generate overlapping work. Block the parent until the child finishes or the scopes are explicitly separated, and reuse its completed changes when planning resumes.
 
-1. **Close the HLD task.** Close the HLD task only when ado.hldOwned is true. Move it to the `Completed` category if it isn't already (`asdf:ado-work-items`), then write `{"hld":{"closedAt":"<utc now>"}}` with `asdf.ts item-set`. If someone reopens the HLD later, ASDF uses this to detect it. An adopted HLD stays as its owner left it.
+1. **Close the HLD task.** Close the HLD task only when ado.hldOwned is true.
+   Also recheck that this item currently drives it and it is still assigned
+   to you. Then write `hld.closedAt` with `item-set` for reopen
+   detection. Historical ownership alone is not authority; leave shared or
+   delegated HLDs as their owners left them.
 2. **Mark assumptions approved.** In `decisions.md`, change every `ASDF assumption` row to `ASDF assumption, approved with HLD v<N>`.
-3. **The spec** is the approved `hld.v<N>.md` in the item folder. The plan argues from it and never contradicts it. For an adopted HLD with no local copy, first copy its latest design (the newest HLD attachment, or the HLD task's description) into `hld.md` and `hld.v<N>.md`.
+3. **The spec** is the approved `hld.v<N>.md` in the item folder. The plan argues
+   from it and never contradicts it. For an adopted/shared/delegated HLD,
+   reread the owner's current approved attachment/description even if a local
+   copy exists. Preserve a superseded draft, copy the approved content into
+   `hld.md` and its versioned snapshot, and record the source/approval
+   provenance and current version before planning; never plan an obsolete draft.
 4. **Decide, don't ask.** Record planning decisions as P-numbered decisions. Gaps, conflicts and choices the HLD leaves open become `P<n>` rows in `decisions.md`, with provenance `ASDF planning decision`, plus a line in the plan. They go in the PR description later.
 5. **Unlisted dependencies block.** A dependency the HLD didn't list must not be planned in. Post the `blocker` comment, run `asdf.ts stage -Id <id> -Stage blocked -Reason "<short reason>"`, and stop.
 6. **Keep it simple.** Plan the smallest change that delivers the item's scope, and nothing it didn't ask for. For a PBI that is the HLD; for a standalone Task it is the Task description within the HLD's constraints. Do not rebuild the rest of its parent.

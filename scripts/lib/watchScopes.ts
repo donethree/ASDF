@@ -1,4 +1,4 @@
-import type { Workspace } from './workspaces.ts';
+import { normalizeWorktreeRoot, type Workspace } from './workspaces.ts';
 import { fail } from './util.ts';
 
 export type WatchScope = { kind: 'project'; areaPaths: string[] } | { kind: 'team'; team: string };
@@ -8,6 +8,7 @@ export type AsdfConfig = {
   schemaVersion: 2; userName: string; orgs: OrgConfig[];
   workItemTypes: { parent: string[]; task: string[]; feature: string[] };
   workspaces: Workspace[]; lockStaleMinutes: number; maxQuestionsPerRound: number;
+  worktreeRoot?: string;
   [key: string]: unknown;
 };
 export type ProjectIdentity = { org: string; project: string };
@@ -87,6 +88,7 @@ export function normalizeConfig(input: unknown): AsdfConfig {
     if (typeof v !== 'number' || !Number.isFinite(v) || v <= 0) fail('ASDF_CONFIG_INVALID', 'configuration limits must be positive numbers');
     return v;
   };
-  return { ...config, schemaVersion: 2, userName, orgs, workItemTypes: { parent, task, feature }, workspaces,
+  const worktreeRoot = config.worktreeRoot === undefined ? undefined : normalizeWorktreeRoot(configText(config.worktreeRoot, 'worktreeRoot'));
+  return { ...config, ...(worktreeRoot === undefined ? {} : { worktreeRoot }), schemaVersion: 2, userName, orgs, workItemTypes: { parent, task, feature }, workspaces,
     lockStaleMinutes: number(config.lockStaleMinutes, 90), maxQuestionsPerRound: number(config.maxQuestionsPerRound, 4) };
 }

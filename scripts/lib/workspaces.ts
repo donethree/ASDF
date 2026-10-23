@@ -1,7 +1,7 @@
 // Workspaces: the local checkouts listed in init, and the Azure DevOps repo each one holds.
 // ASDF never searches the disk for code; an item's code is in the workspace of the package its work item names.
 import { statSync } from 'node:fs';
-import { basename, resolve } from 'node:path';
+import { basename, isAbsolute, join, resolve } from 'node:path';
 import { fail, git } from './util.ts';
 
 export interface RemoteRepo {
@@ -13,6 +13,19 @@ export interface RemoteRepo {
 export interface Workspace extends RemoteRepo {
   path: string;
   name: string;
+}
+
+export const MAX_WORKTREE_PATH_LENGTH = 13;
+export function normalizeWorktreeRoot(input: string): string {
+  if (typeof input !== 'string' || !isAbsolute(input) || /[\u0000-\u001f]/.test(input)
+    || (process.platform === 'win32' && !/^[a-z]:[\\/]/i.test(input))) {
+    fail('ASDF_WORKTREE_ROOT_INVALID', 'enter an absolute worktree parent folder, for example Q:\\w');
+  }
+  const root = resolve(input);
+  if (join(root, '000000').length > MAX_WORKTREE_PATH_LENGTH) {
+    fail('ASDF_WORKTREE_PATH_TOO_LONG', `choose a shorter parent: ${root} plus a six-character name must be at most 13 characters`);
+  }
+  return root;
 }
 
 const REMOTE_PATTERNS = [

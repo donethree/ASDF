@@ -15,6 +15,11 @@ import { invokeSignals } from './signals.ts';
 import { AsdfError, fail, type Json } from './util.ts';
 import { assignmentQuery, discoveryQuery, discoverySources, nextIdPage } from './discovery.ts';
 import { recordAutomationEvent } from './automationLog.ts';
+import { reserveWorktreePath } from './worktreePaths.ts';
+import { assertLiveMutation, readLiveWatch } from './liveWatch.ts';
+import { beginLiveInteraction, bindLiveSchedule, checkDesignRequest, consumeDesignFeedback, enterLiveCheck,
+  finishLiveCheck, observeDesignDriver, prepareLiveWait, publishDesignRequest, readDesignFeedback,
+  recordDesignFeedback, recordLiveInteraction, selectLiveChild, stopLiveWatch, suspendLiveWatch } from './liveContinuation.ts';
 
 type Params = Record<string, Json>;
 
@@ -39,6 +44,39 @@ export const COMMANDS: Record<string, Command> = {
     },
   },
   'settings-set': { required: ['ContextPath'], run: (p) => setSettings(p.ContextPath) },
+  'live-info': { required: ['Id'], numbers: ['Id'], run: (p) => readLiveWatch(p.Id) },
+  'live-prepare': { required: ['Id', 'Owner', 'ThreadId', 'RootId'], numbers: ['Id', 'RootId'],
+    run: (p) => prepareLiveWait(p.Id, p.Owner, p.ThreadId, p.RootId) },
+  'live-bind': { required: ['Id', 'Owner', 'WatchId', 'Generation', 'ScheduleId'], numbers: ['Id', 'Generation', 'ScheduleId'],
+    run: (p) => bindLiveSchedule(p.Id, p.Owner, { watchId: p.WatchId, generation: p.Generation }, p.ScheduleId) },
+  'live-enter': { required: ['Id', 'Owner', 'WatchId', 'Generation'], numbers: ['Id', 'Generation'],
+    run: (p) => enterLiveCheck(p.Id, { watchId: p.WatchId, generation: p.Generation }, p.Owner) },
+  'live-finish': { required: ['Id', 'Owner', 'WatchId', 'Generation', 'ReadsSucceeded'], numbers: ['Id', 'Generation'],
+    run: (p) => {
+      if (!['true', 'false'].includes(p.ReadsSucceeded)) fail('ASDF_BAD_ARGUMENT', 'ReadsSucceeded must be true or false');
+      return finishLiveCheck(p.Id, { watchId: p.WatchId, generation: p.Generation }, p.Owner, p.ReadsSucceeded === 'true');
+    } },
+  'live-suspend': { required: ['Id', 'Owner', 'WatchId', 'Generation'], numbers: ['Id', 'Generation'],
+    run: (p) => suspendLiveWatch(p.Id, { watchId: p.WatchId, generation: p.Generation }, p.Owner) },
+  'live-stop': { required: ['Id', 'Owner', 'WatchId', 'Generation'], numbers: ['Id', 'Generation'],
+    run: (p) => stopLiveWatch(p.Id, { watchId: p.WatchId, generation: p.Generation }, p.Owner) },
+  'live-interaction': { required: ['Id', 'Owner', 'WatchId', 'Generation', 'File'], numbers: ['Id', 'Generation'], file: 'Interaction',
+    run: (p) => beginLiveInteraction(p.Id, { watchId: p.WatchId, generation: p.Generation }, p.Owner, p.Interaction) },
+  'live-recorded': { required: ['Id', 'Owner', 'WatchId', 'Generation', 'InteractionId', 'CommentId'], numbers: ['Id', 'Generation', 'CommentId'],
+    run: (p) => recordLiveInteraction(p.Id, { watchId: p.WatchId, generation: p.Generation }, p.Owner, p.InteractionId, p.CommentId) },
+  'design-request': { required: ['Id', 'Owner', 'File', 'Version', 'RequestedAt'], numbers: ['Id', 'Version'], file: 'Expected',
+    run: (p) => publishDesignRequest(p.Id, p.Owner, p.Expected, p.Version, p.RequestedAt) },
+  'design-request-check': { required: ['Id', 'Owner', 'File', 'Version', 'RequestedAt'], numbers: ['Id', 'Version'], file: 'Expected',
+    run: (p) => checkDesignRequest(p.Id, p.Owner, p.Expected, p.Version, p.RequestedAt) },
+  'design-feedback-info': { required: ['Id', 'Owner'], numbers: ['Id'], run: (p) => readDesignFeedback(p.Id, p.Owner) },
+  'design-feedback-recorded': { required: ['Id', 'Owner', 'InteractionId', 'CommentId'], numbers: ['Id', 'CommentId'],
+    run: (p) => recordDesignFeedback(p.Id, p.Owner, p.InteractionId, p.CommentId) },
+  'design-feedback-consume': { required: ['Id', 'Owner', 'FeedbackId', 'Summary'], numbers: ['Id'],
+    run: (p) => consumeDesignFeedback(p.Id, p.Owner, p.FeedbackId, p.Summary) },
+  'design-role': { required: ['Id', 'Owner', 'Mode'], numbers: ['Id'],
+    run: (p) => observeDesignDriver(p.Id, p.Owner, p.Mode) },
+  'live-child': { required: ['Id', 'File'], optional: ['Visited'], numbers: ['Id'], file: 'Children',
+    run: (p) => selectLiveChild(p.Id, p.Children, p.Visited ? String(p.Visited).split(',').map(Number) : []) },
   'config': { run: () => getConfig() },
   'config-set': { required: ['File'], file: 'Config', run: (p) => setConfig(p.Config) },
   'automation-log': {
@@ -63,16 +101,17 @@ export const COMMANDS: Record<string, Command> = {
   },
   'item': { required: ['Id'], numbers: ['Id'], run: (p) => withPath(getItem(p.Id)) },
   'items': { optional: ['Stage'], run: (p) => getItems(p.Stage ? String(p.Stage).split(',').map((s) => s.trim()).filter(Boolean) : []).map(withPath) },
-  'item-set': { required: ['Id', 'File'], numbers: ['Id'], file: 'Patch', run: (p) => setItem(p.Id, p.Patch) },
+  'item-set': { required: ['Id', 'File'], optional: ['Owner'], numbers: ['Id'], file: 'Patch', run: (p) => setItem(p.Id, p.Patch) },
   'item-repo': {
-    required: ['Id', 'Name'], optional: ['Org', 'Project'], numbers: ['Id'],
+    required: ['Id', 'Name'], optional: ['Org', 'Project', 'Owner'], numbers: ['Id'],
     run: (p) => setItemRepo(p.Id, p.Name, p.Org, p.Project),
   },
   'memory-path': { required: ['Org', 'Project', 'Repo'], run: (p) => ({ path: memoryPath(p.Org, p.Project, p.Repo) }) },
+  'worktree-path': { required: ['Id', 'Owner'], numbers: ['Id'], run: (p) => reserveWorktreePath(p.Id, p.Owner) },
   'execution-context': { required: ['Id', 'Owner'], numbers: ['Id'], run: (p) => executionContext(p.Id, p.Owner) },
   'code-path': { required: ['Id', 'Owner', 'Path'], numbers: ['Id'], run: (p) => codePath(p.Id, p.Owner, p.Path) },
   'stage': {
-    required: ['Id', 'Stage'], optional: ['Reason', 'WorkItemId', 'Now'], numbers: ['Id', 'WorkItemId'],
+    required: ['Id', 'Stage'], optional: ['Reason', 'WorkItemId', 'Now', 'Owner'], numbers: ['Id', 'WorkItemId'],
     run: (p) => setItemStage(p.Id, p.Stage, p.Reason, p.WorkItemId, p.Now),
   },
   'signals': {
@@ -97,14 +136,14 @@ export const COMMANDS: Record<string, Command> = {
   'unlock': { required: ['Id', 'Owner'], numbers: ['Id'], run: (p) => unlockItem(p.Id, p.Owner) },
   'repo-skills': { required: ['RepoPath', 'Kind'], run: (p) => findRepoSkills(p.RepoPath, p.Kind) },
   'task-brief': {
-    required: ['Id', 'PlanPath', 'TaskNumber'], numbers: ['Id', 'TaskNumber'],
+    required: ['Id', 'PlanPath', 'TaskNumber'], optional: ['Owner'], numbers: ['Id', 'TaskNumber'],
     run: (p) => ({ path: taskBrief(p.Id, p.PlanPath, p.TaskNumber) }),
   },
   'review-package': {
     required: ['Id', 'RepoPath', 'Base', 'Head', 'Owner'], numbers: ['Id'],
     run: (p) => ({ path: reviewPackage(p.Id, p.RepoPath, p.Base, p.Head, p.Owner) }),
   },
-  'ledger-add': { required: ['Id', 'Text'], optional: ['Now'], numbers: ['Id'], run: (p) => ({ line: ledgerAdd(p.Id, p.Text, p.Now) }) },
+  'ledger-add': { required: ['Id', 'Text'], optional: ['Now', 'Owner'], numbers: ['Id'], run: (p) => ({ line: ledgerAdd(p.Id, p.Text, p.Now) }) },
   'task-start': {
     required: ['Id', 'PlanPath', 'TaskNumber', 'RepoPath', 'Owner'], numbers: ['Id', 'TaskNumber'],
     run: (p) => taskStart(p.Id, p.PlanPath, p.TaskNumber, p.RepoPath, p.Owner),
@@ -173,9 +212,11 @@ export function runCli(argv: string[]): { exitCode: number; output: string } {
     let operationApplied = false;
     const invoke = () => {
       if (mutates && name !== 'signals') {
+        assertLiveMutation(params.Id, workerOwner ?? params.Owner);
         const claim = readWorkerClaim(params.Id);
         if (claim && claim.owner !== workerOwner) fail('ASDF_LOCK_NOT_OWNER', 'item has an active worker');
       }
+      if (name === 'signals' && params.Owner !== undefined) assertLiveMutation(params.Id, params.Owner);
       const value = command.run(params);
       if (['stage', 'item-set', 'item-repo', 'signals'].includes(name) && !(name === 'signals' && (value as Json).processed === false)) {
         operationApplied = true;

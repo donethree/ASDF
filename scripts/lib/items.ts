@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { branchPrefix, contextPath, getConfig, withSettingsGuard } from './settings.ts';
 import { fail, isObject, now, oneOf, prop, readJson, same, stamp, toList, writeJson, type Json } from './util.ts';
+import { assertDesignCanAdvance } from './approval.ts';
 
 export const STAGES = [
   'tracked', 'awaiting-parent', 'new', 'awaiting-answers', 'answers-received', 'awaiting-approval', 'approved',
@@ -169,6 +170,7 @@ export function setItemStage(id: number, stageName: string, reason?: string, wor
   const time = stamp(now(at));
   const state = getItem(id);
   const previous = state.stage;
+  assertDesignCanAdvance(state, stage);
   if (stage === 'blocked' || stage === 'paused') {
     if (!oneOf(previous, ['blocked', 'paused'])) state.resumeStage = previous;
   } else {

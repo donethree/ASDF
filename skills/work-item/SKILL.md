@@ -1,15 +1,24 @@
 ---
 name: work-item
-description: Use when do-next hands off one ASDF item, or a persistent CLI worker supplies an ASDF worker request
+description: Use when do-next, a live-continuation controller, or a persistent CLI worker hands off one ASDF item
 ---
 
 # Work one ASDF item
 
-This is the single-item unattended stage router. Work only the governing item
-in the dispatch. Questions, approval and review remain in ADO, never chat.
+This is the shared single-item stage router. Work only the governing item
+in the dispatch. Unattended questions/approval remain in ADO, never chat.
 Conversation history is context, not proof of completion or authority.
 
 ## Entry and ownership
+
+**Live handoff:** only `asdf:live-continuation` or direct interactive intake
+supplies origin live, threadId/rootItemId and a held operation owner. Retain that
+mode through stage skills; normal chat questions/feedback/design approval are
+allowed. At an external design or PR wait, return to live-continuation once,
+not worker-complete. Never invoke do-next or a separate CLI worker from live
+mode. `ASDF_WORKER_REQUEST` always takes precedence as persistent, never live.
+Include the current Owner on live-protected item-set/item-repo/stage/ledger-add/
+task-brief commands as well as normal owner-required helpers.
 
 **Persistent worker:** read the absolute `ASDF_WORKER_REQUEST` file supplied
 by the runner. Call its `cli.executable` and `cli.script` with
@@ -22,9 +31,10 @@ Never invoke do-next, another item runner, or session-recover from a worker.
 Heartbeat it before work. The caller acquires and releases it; no binding,
 worker request or persistent acknowledgement is needed.
 
-**Decision-log correlation:** inline do-next also supplies `auditPassId`;
+**Decision-log correlation:** live mode sets `auditPassId = threadId`; inline do-next supplies `auditPassId`;
 persistent entry uses the validated request's `passId`, never its worker owner
-or CLI session ID. Direct work without a do-next audit pass does not invent one.
+or CLI session ID. Direct work without a do-next or live-controller audit context
+does not invent one.
 
 Read the current item, config and ledger. Re-read ADO assignment and parent
 roles. Skip newly managed children. For a completed PR, perform only the
@@ -133,3 +143,5 @@ report the error and exit; the runner records an incomplete operation.
 End with what changed and what/where the item is waiting for. Do not start
 the next item. Inline mode returns this summary to do-next without calling
 worker-complete or worker-fail.
+Live mode returns to live-continuation for the next wait or authorized Feature
+child handoff, without persistent acknowledgement or closing the conversation.

@@ -153,7 +153,14 @@ Build the item's signals file under its held operation lock, then run `asdf.ts s
 
 - `[ASDF]` comments never count.
 - Only comments newer than the latest round or approval request count.
-- Approval by state counts only when the HLD task moved to Completed after the approval request. Otherwise, an approval is the latest human comment after the request, starting with "approved".
+- Approval by state counts only when the HLD task moved to Completed after the approval request.
+  Later human feedback supersedes that Done transition. A plain unconditional
+  `approved` or `approved, ship it` comment (case-insensitive, optional terminal
+  punctuation) can approve the current request; mixed conditions/changes are
+  feedback. Accepted pending revisions must be recorded and published as a newer
+  request before approval can advance work. Shared waiters do not publish an
+  owner's revision, and Feature self-ID fallback never treats Feature Done as
+  design approval. Use the shared signals/receipt helpers, not prose guesses.
 
 Use what it reports. For a Feature, its Breakdown task plays the part of the HLD task.
 
