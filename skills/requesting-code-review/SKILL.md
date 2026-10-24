@@ -14,24 +14,24 @@ The Review task is ASDF's own review of its work, before anyone else sees a PR. 
 - Reuse the operation owner from `asdf:using-asdf`. The item is in stage `self-review`.
 - Refresh and save its execution context. Give the packet to every reviewer, including repo-provided skills/agents; require explicit codeRoot cwd, applicable target-repo instructions, read-only code and item-local reports.
 - If `ado.reviewId` is set and still assigned to you, move that Review task to `InProgress`. Otherwise keep the report local for the PR; never invent an id or overwrite the governing Task's description.
-- Build the whole-branch package in the worktree:
+- Build the whole-branch package in verified codeRoot (worktree or recorded source mode):
 
-  1. `git -C "<worktree>" merge-base "origin/<default branch>" HEAD` prints the base commit.
-  2. `asdf.ts review-package -Id <id> -Owner <operation owner> -RepoPath "<worktree>" -Base <base commit> -Head HEAD`
+  1. `git -C "<codeRoot>" merge-base "origin/<default branch>" HEAD` prints the base commit.
+  2. `asdf.ts review-package -Id <id> -Owner <operation owner> -RepoPath "<codeRoot>" -Base <base commit> -Head HEAD`
 
 ## 2. Reviewers
 
 Run every review skill the repo provides. ASDF's own reviewer runs too, and each is a separate subagent with the same package.
 
 1. **The ASDF reviewer.** Dispatch a subagent with [code-reviewer.md](./code-reviewer.md), filled with:
-   - the package path, `[EXECUTION_CONTEXT_FILE]`, worktree path, base commit and HEAD,
+   - the package path, `[EXECUTION_CONTEXT_FILE]`, codeRoot path, base commit and HEAD,
    - requirements: the approved `hld.v<N>.md` for a PBI; `item.md` for a standalone Task, plus the approved HLD as constraints when it has one,
    - `plan.md` when it exists (small Tasks have no plan),
    - the `P<n>` rows from `decisions.md`, or none,
    - `deep-dive.md`, if the item folder has one.
 
    Fill `[DESCRIPTION]` with this item's change, `[PLAN_OR_REQUIREMENTS]` with those actual inputs and its scope, and `[BASE_SHA]`/`[HEAD_SHA]` with the package refs. Do not send paths to nonexistent artifacts. Without an HLD, new dependencies are not approved.
-2. **The repo's reviewers.** Run `asdf.ts repo-skills -RepoPath "<worktree>" -Kind review`. For each result, dispatch its own subagent:
+2. **The repo's reviewers.** Run `asdf.ts repo-skills -RepoPath "<codeRoot>" -Kind review`. For each result, dispatch its own subagent:
    - **a skill:** "Use the `<name>` skill to review the change in `<package path>`; report findings as Critical / Important / Minor with file and line";
    - **an agent:** dispatch that agent with the same request.
 

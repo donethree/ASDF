@@ -42,6 +42,11 @@ ownership-checked close-out; otherwise pause a reassigned item without ADO
 or code writes. Reuse the existing item worktree and refresh execution-context
 before code work; this session's artifact cwd is never the code root.
 Completed ledger tasks stay completed even if old chat says otherwise.
+Before continuing stage `implementing`, require the executor's
+`asdf:using-git-worktrees` preflight: repository guidance discovery, initialization
+and a fresh recorded baseline. For a resumed small Task, run it here before
+continuing TDD; full-plan executors run it at their entry. Do not edit or dispatch
+on an old baseline. Preserve the verified worktree/source checkout mode.
 
 Check the required ASDF skills are enabled and resolve to this plugin before
 loading them. Discover ADO tools in this worker process using
@@ -106,7 +111,7 @@ write its own failure event; the coordinator can record the returned failure.
 | `new` | Feature: `asdf:feature-breakdown`; parent: `asdf:brainstorming`; Task: Task routing in `asdf:intake` |
 
 Retain the request owner across skill/subagent handoffs. Refresh execution
-packets, load target-repo instructions and use explicit verified worktree
+packets, load target-repo instructions and use explicit verified codeRoot
 paths. No detached helpers or unawaited workers: finish all child work before
 acknowledging the run. The runner does not create a second worktree.
 Design stays read-only against recorded workspace revisions.

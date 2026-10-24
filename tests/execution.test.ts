@@ -17,6 +17,7 @@ describe('item execution context', () => {
     ctx = newContext();
     newItem({ id: 201, org: 'contoso', project: 'Commerce', kind: 'parent', type: 'User Story', title: 'Orders' });
     work = newItemWorktree(ctx, 201);
+    assert.equal(runCli('baseline', '-Id', '201', '-Owner', work.owner, '-BuildCommand', 'echo build passed').code, 0);
   });
 
   const packet = (owner = 'test-owner-201') => runCli('execution-context', '-Id', '201', '-Owner', owner);
@@ -110,6 +111,7 @@ describe('item execution context', () => {
     const outside = join(newFolder('external-worktree'), 'w');
     git('-C', work.workspace, 'worktree', 'move', work.repo, outside);
     setItem(201, { repo: { worktreePath: outside } });
+    assert.equal(runCli('baseline', '-Id', '201', '-Owner', work.owner, '-BuildCommand', 'echo build passed').code, 0);
     const result = packet();
     assert.equal(result.code, 0, JSON.stringify(result.json));
     assert.equal(result.json.codeRoot, outside);

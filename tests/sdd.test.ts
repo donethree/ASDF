@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { beforeEach, describe, it } from 'node:test';
 import { itemPath, newItem } from '../scripts/lib/items.ts';
 import { reviewPackage, sddPath, taskBrief, taskDone, taskStart } from '../scripts/lib/sdd.ts';
-import { newContext, newItemWorktree } from './helpers.ts';
+import { newContext, newItemWorktree, runCli } from './helpers.ts';
 
 const PLAN = ['# P', '### Task 1: Alpha', 'alpha body', '### Task 2: Beta', 'beta body', '## Done', 'trailer'].join('\n');
 
@@ -18,6 +18,7 @@ describe('SDD helpers', () => {
     plan = join(itemPath(5)!, 'plan.md');
     writeFileSync(plan, PLAN);
     repo = newItemWorktree(ctx, 5);
+    assert.equal(runCli('baseline', '-Id', '5', '-Owner', repo.owner, '-BuildCommand', 'echo build passed').code, 0);
   });
 
   it('keeps the workspace in the item folder', () => {

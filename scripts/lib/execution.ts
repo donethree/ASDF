@@ -2,9 +2,9 @@
 import { lstatSync, readdirSync } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { getItem } from './items.ts';
+import { getItem, getItems } from './items.ts';
 import { isLocked } from './lock.ts';
-import { getConfig } from './settings.ts';
+import { branchPrefix, getConfig } from './settings.ts';
 import { fail, git, readJson, same, toList } from './util.ts';
 import { resolveWorkspace } from './workspaces.ts';
 import { artifactPath, inside, physical, stat } from './artifacts.ts';
@@ -28,6 +28,7 @@ export interface ExecutionContext {
   artifactRoot: string;
   branch: string;
   head: string;
+  checkoutMode: 'worktree' | 'source';
   instructions: InstructionFiles;
 }
 
@@ -93,7 +94,7 @@ function instructionFiles(codeRoot: string): InstructionFiles {
   return result;
 }
 
-export function executionContext(id: number, owner: string, requestedRepoPath?: string): ExecutionContext {
+export function workspaceContext(id: number, owner: string) {
   const state = getItem(id);
   const artifactRoot = artifactPath(id);
   let lockOwner: unknown;
@@ -105,16 +106,50 @@ export function executionContext(id: number, owner: string, requestedRepoPath?: 
   if (!same(lockOwner, owner) || !isLocked(id)) fail('ASDF_LOCK_NOT_OWNER', `item ${id} is not held by ${owner}`);
 
   const repo = state.repo;
-  if (!repo || !['org', 'project', 'name', 'clonePath', 'worktreePath', 'branch'].every((key) => typeof repo[key] === 'string' && repo[key])) {
-    fail('ASDF_EXECUTION_CONTEXT', `item ${id} needs a recorded repository, worktree and branch`);
+  if (!repo || !['org', 'project', 'name', 'clonePath', 'branch'].every((key) => typeof repo[key] === 'string' && repo[key])) {
+    fail('ASDF_EXECUTION_CONTEXT', `item ${id} needs a recorded repository and branch`);
   }
-  if (!isAbsolute(repo.clonePath) || !isAbsolute(repo.worktreePath)) fail('ASDF_EXECUTION_CONTEXT', 'execution roots must be absolute');
+  if (!isAbsolute(repo.clonePath)) fail('ASDF_EXECUTION_CONTEXT', 'execution roots must be absolute');
   const configured = toList(getConfig()?.workspaces).find((w) =>
     same(w.org, repo.org) && same(w.project, repo.project) && same(w.repo, repo.name)
     && samePath(w.path, repo.clonePath));
   if (!configured) fail('ASDF_EXECUTION_CONTEXT', `item ${id}'s workspace is not configured`);
   const workspaceReadRoot = physical(repo.clonePath, 'ASDF_EXECUTION_CONTEXT');
-  const codeRoot = validateWorktreeLocation(id, repo.worktreePath);
+  const actual = resolveWorkspace(workspaceReadRoot);
+  if (!same(actual.org, repo.org) || !same(actual.project, repo.project) || !same(actual.repo, repo.name)
+    || !samePath(physical(actual.path, 'ASDF_EXECUTION_CONTEXT'), workspaceReadRoot)) {
+    fail('ASDF_EXECUTION_CONTEXT', `repository identity changed at ${workspaceReadRoot}`);
+  }
+  return { state, repo, artifactRoot, workspaceReadRoot };
+}
+
+export function executionContext(id: number, owner: string, requestedRepoPath?: string): ExecutionContext {
+  const { state, repo, artifactRoot, workspaceReadRoot } = workspaceContext(id, owner);
+  if (typeof repo.worktreePath !== 'string' || !isAbsolute(repo.worktreePath)) {
+    fail('ASDF_EXECUTION_CONTEXT', `item ${id} needs an absolute recorded code checkout`);
+  }
+  if (repo.checkoutMode !== undefined && repo.checkoutMode !== null && !['worktree', 'source'].includes(repo.checkoutMode)) {
+    fail('ASDF_EXECUTION_CONTEXT', 'unknown checkout mode');
+  }
+  const checkoutMode = repo.checkoutMode === 'source' ? 'source' : 'worktree';
+  const codeRoot = checkoutMode === 'source'
+    ? physical(repo.worktreePath, 'ASDF_EXECUTION_CONTEXT') : validateWorktreeLocation(id, repo.worktreePath);
+  if (checkoutMode === 'source') {
+    const fallback = repo.sourceFallback;
+    const prefix = branchPrefix();
+    if (!samePath(codeRoot, workspaceReadRoot) || typeof fallback?.reason !== 'string' || !fallback.reason.trim()
+      || !prefix || !repo.branch.startsWith(`${prefix}/${id}-`)
+      || !/^origin\/(?:main|master)$/.test(fallback.baseRef) || !/^[0-9a-f]{40,64}$/.test(fallback.baseCommit)) {
+      fail('ASDF_EXECUTION_CONTEXT', 'source checkout needs a recorded main/master fallback');
+    }
+    if (getItems().some((item) => item.id !== id && item.stage !== 'done' && item.repo?.checkoutMode === 'source'
+      && typeof item.repo.clonePath === 'string' && samePath(physical(item.repo.clonePath, 'ASDF_EXECUTION_CONTEXT'), codeRoot))) {
+      fail('ASDF_EXECUTION_CONTEXT', 'source checkout is reserved by another item');
+    }
+    if (git(codeRoot, ['merge-base', '--is-ancestor', fallback.baseCommit, 'HEAD']).code !== 0) {
+      fail('ASDF_EXECUTION_CONTEXT', 'source branch no longer descends from its recorded remote base');
+    }
+  }
   if (requestedRepoPath !== undefined && (!isAbsolute(requestedRepoPath)
     || !samePath(physical(requestedRepoPath, 'ASDF_EXECUTION_CONTEXT'), codeRoot))) {
     fail('ASDF_EXECUTION_CONTEXT', `use item ${id}'s worktree, not ${requestedRepoPath}`);
@@ -138,14 +173,29 @@ export function executionContext(id: number, owner: string, requestedRepoPath?: 
     itemId: id, owner, cli: { executable: process.execPath, script: resolve(dirname(fileURLToPath(import.meta.url)), '..', 'asdf.ts') },
     workItem: { org: state.org, project: state.project },
     repository: { org: repo.org, project: repo.project, name: repo.name },
-    workspaceReadRoot, codeRoot: resolve(repo.worktreePath), artifactRoot, branch,
+    workspaceReadRoot, codeRoot: resolve(repo.worktreePath), artifactRoot, branch, checkoutMode,
     head: gitOutput(codeRoot, ['rev-parse', '--verify', 'HEAD']),
     instructions: instructionFiles(codeRoot),
   };
 }
 
+export function requireBaseline(context: ExecutionContext): void {
+  const file = artifactPath(context.itemId, 'baseline.json');
+  if (!stat(file)) fail('ASDF_BASELINE_REQUIRED', 'run baseline in the verified codeRoot before implementation');
+  let baseline;
+  try { baseline = readJson(file); }
+  catch (error) { fail('ASDF_BASELINE_REQUIRED', `cannot read baseline evidence: ${(error as Error).message}`); }
+  if (baseline?.passed !== true || baseline.owner !== context.owner || baseline.branch !== context.branch
+    || baseline.codeRoot !== context.codeRoot || typeof baseline.buildCommand !== 'string' || !baseline.buildCommand.trim()
+    || typeof baseline.head !== 'string' || !/^[0-9a-f]{40,64}$/.test(baseline.head)
+    || git(context.codeRoot, ['merge-base', '--is-ancestor', baseline.head, context.head]).code !== 0) {
+    fail('ASDF_BASELINE_REQUIRED', 'this operation needs a passing baseline build in its current codeRoot and branch');
+  }
+}
+
 export function codePath(id: number, owner: string, path: string): { path: string; instructions: InstructionFiles } {
   const context = executionContext(id, owner);
+  if (getItem(id).stage === 'implementing') requireBaseline(context);
   const codeRoot = physical(context.codeRoot, 'ASDF_EXECUTION_CONTEXT');
   const absolute = resolve(codeRoot, path);
   if (!inside(codeRoot, absolute) && !inside(context.codeRoot, absolute)) {

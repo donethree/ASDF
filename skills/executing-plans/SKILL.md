@@ -42,6 +42,9 @@ that norms say you ask about first (a merge, a push to a shared branch, a
 publish); and a plan so broken that every path forward is a guess. For
 those, stop and ask.
 
+These execution stop conditions do not waive the ASDF overlay's mandatory
+preflight, ownership, approval or dependency blockers.
+
 ## ASDF overlay (read first; it overrides anything below)
 
 - **Fallback only.** Use this skill only when subagents cannot be dispatched. Otherwise ASDF always uses `asdf:subagent-driven-development`.
@@ -51,8 +54,9 @@ those, stop and ask.
   - stop working on that item.
 - **Dependencies.** A dependency the approved HLD didn't list is a blocker, never a ruling.
 - **Workspace and ledger.** The item's `sdd\` folder, through `asdf.ts task-start`, `asdf.ts task-done`, `asdf.ts review-package` and `asdf.ts ledger-add`. It's the same ledger `asdf:subagent-driven-development` uses, so either can resume the other's work.
-- **The worktree** is the item's (`repo.worktreePath`).
-- **Execution context.** Refresh `asdf.ts execution-context -Id <id> -Owner <operation owner>` at entry, resume and before commits. Follow `asdf:using-asdf`'s Code execution context contract: load the target-repo instructions, use `code-path` before edits, absolute file paths and an explicit worktree cwd for each command. Inline execution has no exemption from these boundaries.
+- **The code checkout** is the execution packet's `codeRoot`: the worktree or the validated source-branch fallback from `asdf:using-git-worktrees`.
+- **Preflight is a gate.** On every entry and resume, run `asdf:using-git-worktrees` through repository README/worktree/build/test skill discovery, initialization and the recorded baseline. Continue only on exit 0 and `recorded: true` before task-start or code edits. Old ledger evidence is not a current build; worktree initialization failure uses only that skill's validated source fallback.
+- **Execution context.** Refresh `asdf.ts execution-context -Id <id> -Owner <operation owner>` at entry, resume and before commits. Follow `asdf:using-asdf`'s Code execution context contract: load the target-repo instructions, use `code-path` before edits, absolute file paths and an explicit codeRoot cwd for each command. Inline execution has no exemption from these boundaries.
 - **ADO tasks.** Move each implementation task to `InProgress` when it starts, and to `Completed` when its task is done.
 - **Heartbeat.** Reuse the live or unattended operation owner from `asdf:using-asdf`; acquire one on direct entry. Run `asdf.ts heartbeat -Id <id> -Owner <operation owner>` between tasks. If heartbeat fails with ASDF_LOCK_NOT_OWNER, stop at once and write nothing more. Another pass has taken the item over: no commits, comments, stage changes or unlock.
 - **Task completion.** `task-done` must exit 0 and report `recorded: true`. A nonzero exit or `recorded: false` leaves the task incomplete; read its test log and fix or block, never advance on a success-shaped tool response.
@@ -126,6 +130,7 @@ digraph process {
 
 Ensure the work happens in an isolated workspace: use
 asdf:using-git-worktrees to create one or verify the existing one.
+Complete its discovery and baseline before the next task, also on resume.
 Never start implementation on a main/master branch without your human
 partner's explicit consent.
 
@@ -186,7 +191,7 @@ in the workspace and read its tail; read a brief, not the whole plan.
 
 ### 1. Take the task
 
-- Run `asdf.ts task-start -Id <id> -Owner <operation owner> -PlanPath <item>\plan.md -TaskNumber N -RepoPath <worktree>`. It prints the verified execution context, brief
+- Run `asdf.ts task-start -Id <id> -Owner <operation owner> -PlanPath <item>\plan.md -TaskNumber N -RepoPath "<codeRoot>"`. It prints the verified execution context, brief
   path and BASE (the commit the task's range is cut from) in one call.
   Read the brief for every task, including ones you remember from setup:
   what you remember is a summary, the brief has the exact values,
@@ -238,7 +243,7 @@ the claim. If any item is missing, the task is not complete: finish it.
 
 ### 4. Complete the task
 
-Run `asdf.ts task-done -Id <id> -Owner <operation owner> -TaskNumber N -Base BASE -RepoPath <worktree> -TestCommand "<test command>"`
+Run `asdf.ts task-done -Id <id> -Owner <operation owner> -TaskNumber N -Base BASE -RepoPath "<codeRoot>" -TestCommand "<test command>"`
 with the test command the brief names for the whole task. It runs the
 tests, keeps the full output in the workspace, prints the tail, and — only
 if they pass — appends the completion line to the ledger:

@@ -2,8 +2,8 @@
 // Ports of Superpowers' sdd-workspace, task-brief, review-package, task-start and task-done.
 import { spawnSync } from 'node:child_process';
 import { appendFileSync, closeSync, mkdirSync, openSync, writeFileSync, writeSync } from 'node:fs';
-import { artifactPath, executionContext, shellWorkingDirectory } from './execution.ts';
-import { fail, git, now, readLines, stamp, type Json } from './util.ts';
+import { artifactPath, executionContext, requireBaseline, shellWorkingDirectory } from './execution.ts';
+import { fail, git, now, readLines, stamp, writeJson, type Json } from './util.ts';
 
 function resolveRef(repoPath: string, ref: string): string {
   const result = git(repoPath, ['rev-parse', '--verify', '--quiet', `${ref}^{commit}`]);
@@ -72,13 +72,44 @@ export function ledgerAdd(id: number, text: string, at?: string | Date): string 
 
 export function taskStart(id: number, planPath: string, taskNumber: number, repoPath: string, owner: string): Json {
   const context = executionContext(id, owner, repoPath);
+  requireBaseline(context);
   const brief = taskBrief(id, planPath, taskNumber);
   return { brief, base: context.head, context };
 }
 
+export function runBaseline(id: number, owner: string, buildCommand: string, testCommand?: string): Json {
+  const context = executionContext(id, owner);
+  const cwd = shellWorkingDirectory(context.codeRoot);
+  if (!buildCommand.trim() || (testCommand !== undefined && !testCommand.trim())) fail('ASDF_BAD_ARGUMENT', 'baseline commands must not be empty');
+  const file = artifactPath(id, 'baseline.json');
+  const log = artifactPath(id, 'baseline.log');
+  const record = { owner, codeRoot: context.codeRoot, branch: context.branch, head: context.head,
+    buildCommand, testCommand, log, passed: false, at: stamp(now()) };
+  writeJson(file, record);
+  const fd = openSync(log, 'w');
+  let exitCode = 0;
+  try {
+    for (const command of [buildCommand, ...(testCommand === undefined ? [] : [testCommand])]) {
+      executionContext(id, owner, cwd);
+      writeSync(fd, `$ ${command}\n`);
+      const result = spawnSync(command, { cwd, shell: true, stdio: ['ignore', fd, fd], windowsHide: true });
+      if (result.error) writeSync(fd, `${result.error.message}\n`);
+      exitCode = result.error ? 1 : (result.status ?? 1);
+      if (exitCode !== 0) break;
+    }
+  } finally { closeSync(fd); }
+  const after = executionContext(id, owner, cwd);
+  if (after.head !== context.head) fail('ASDF_EXECUTION_CONTEXT', 'baseline command changed HEAD; review repository initialization before continuing');
+  record.passed = exitCode === 0;
+  writeJson(file, record);
+  return { exitCode, log, recorded: record.passed };
+}
+
 // Runs the task's test command through the system shell; only a passing run is written to the ledger.
 export function taskDone(id: number, taskNumber: number, base: string, repoPath: string, testCommand: string, owner: string): Json {
-  repoPath = shellWorkingDirectory(executionContext(id, owner, repoPath).codeRoot);
+  const context = executionContext(id, owner, repoPath);
+  requireBaseline(context);
+  repoPath = shellWorkingDirectory(context.codeRoot);
   const b = resolveRef(repoPath, base);
   sddPath(id);
   const log = artifactPath(id, 'sdd', `task-${taskNumber}-test.log`);

@@ -11,7 +11,7 @@ ASDF never merges locally. It opens a PR in Azure DevOps, lets reviewers and bra
 
 Reuse the operation owner from `asdf:using-asdf`. Before modes 1 or 2 push or mutate a PR, fetch its current status if `ado.prId` is set. Completed means `stage merged` and mode 3, not another push or PR; abandoned means a blocker, not recreation. Repeat before subsequent PR writes.
 
-Before builds, repairs, commits or pushes, refresh the verified execution context and follow `asdf:using-asdf`'s Code execution context contract. Use codeRoot cwd and validated absolute edit paths; keep reports in artifactRoot. Do not substitute the original checkout when the item worktree is missing or wrong.
+Before builds, repairs, commits or pushes, refresh the verified execution context and follow `asdf:using-asdf`'s Code execution context contract. Use codeRoot cwd and validated absolute edit paths; keep reports in artifactRoot. Only a recorded source-fallback mode authorizes the original checkout; do not substitute it when the item worktree is missing or wrong.
 
 When origin live is supplied, return external pr-open/merging waits to
 `asdf:live-continuation` for same-session polling. Chat approval cannot supply
@@ -21,8 +21,8 @@ their existing return behavior and never create live watches.
 
 ## Mode 1: open the PR (from stage `self-review`)
 
-1. **Run the full test suite** in the worktree, through the repo's own test skills when it has them. Don't open a PR on red. Diagnose and repair failures directly with `asdf:systematic-debugging` and TDD, not by redispatching a completed plan. This also applies to small Tasks with no plan. Record each attempt and result in `<item>\reviews\full-suite-repair.md`, retaining the count across passes. Allow at most two repair attempts; if still red, post a blocker and set `stage -Stage blocked -Reason "<failure>"`. Stop rather than re-running reviews every hour. Reset the count only after green or an explicit human reply authorizing another repair cycle. After repair commits, self-review the changed range before continuing.
-2. **Push the branch:** `git -C "<worktree>" push -u origin <repo.branch>`. Push only repo.branch. Never force-push, never push to main or master.
+1. **Run the full test suite** in codeRoot, through the repo's own test skills when it has them. Don't open a PR on red. Diagnose and repair failures directly with `asdf:systematic-debugging` and TDD, not by redispatching a completed plan. This also applies to small Tasks with no plan. Record each attempt and result in `<item>\reviews\full-suite-repair.md`, retaining the count across passes. Allow at most two repair attempts; if still red, post a blocker and set `stage -Stage blocked -Reason "<failure>"`. Stop rather than re-running reviews every hour. Reset the count only after green or an explicit human reply authorizing another repair cycle. After repair commits, self-review the changed range before continuing.
+2. **Push the branch:** `git -C "<codeRoot>" push -u origin <repo.branch>`. Push only repo.branch. Never force-push, never push to main or master.
 3. **Create the PR.** Never open a second PR for an item: reuse an active ado.prId. If `ado.prId` is set and that PR is still active, the push in step 2 already added the new commits: update its description, then go to step 5. Otherwise create it with `repo_pull_request_write create` in the item's repo (`repo.project` and `repo.name`, as in `asdf:ado-work-items`):
    - source `<repo.branch>`, target the default branch;
    - title `<id>: <title>`;
@@ -73,7 +73,18 @@ Before close-out, compare any local follow-up commits with the completed PR's re
 
 5. **Record the `final-summary`.** Post it on the governing item only if it is still assigned to you. After reassignment, keep the summary locally in `item.md` instead; safe local close-out may still reach `done` without editing another person's work item.
 6. **Clean up:**
-   - Run `git -C "<repo.clonePath>" worktree remove "<repo.worktreePath>"`, then delete the local branch.
+   - In worktree mode, run `git -C "<repo.clonePath>" worktree remove "<repo.worktreePath>"`, then delete the local branch.
+   - In source mode, never remove `repo.clonePath`. Verify it is still clean on
+     the item's branch, then switch back to `sourceFallback.previousBranch`
+     (or detach at `previousHead` when the original checkout was detached).
+     Do not pull, reset or overwrite the user's previous branch. Remove only
+     the recorded detached `sourceFallback.worktreePath`, if present and clean,
+     and delete the item branch after leaving it. If restoration or removal
+     fails, preserve the checkout/reservation and report the local blocker;
+     do not mark done and allow another item to take it over.
+     Successful `stage done` releases the source reservation: the CLI excludes
+     done items when checking source occupancy. Keep sourceFallback metadata
+     as history; there is no separate release command.
    - If `<item>\sdd\` exists, delete the briefs, review packages and test logs, and keep `ledger.md`. Small Tasks may have no ledger.
    - Keep everything else in the item folder. It's the memory bank.
    - In particular keep `session\` bindings, run evidence, status and transcripts.

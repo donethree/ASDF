@@ -195,6 +195,7 @@ describe('review artifacts and failure reporting', () => {
     const ctx = newContext();
     parent(100);
     const { repo, head, owner } = newItemWorktree(ctx, 100);
+    assert.equal(runCli('baseline', '-Id', '100', '-Owner', owner, '-BuildCommand', 'echo build passed').code, 0);
     const result = runCli('task-done', '-Id', '100', '-TaskNumber', '1', '-Base', head, '-RepoPath', repo, '-TestCommand', 'exit 3', '-Owner', owner);
     assert.equal(result.code, 3);
     assert.equal(result.json.exitCode, 3);

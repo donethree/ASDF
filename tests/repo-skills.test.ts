@@ -23,6 +23,8 @@ describe('repo skills', () => {
     addSkill('.claude/skills/run-unit-tests/SKILL.md', 'name: run-unit-tests\ndescription: Run the unit tests for a class');
     addSkill('.github/agents/security-reviewer.agent.md', 'description: Reviews diffs for security issues');
     addSkill('.github/skills/docs/SKILL.md', 'name: docs\ndescription: Write documentation');
+    addSkill('.agents/skills/worktree-setup/SKILL.md', 'name: worktree-setup\ndescription: Initialize linked worktrees for development');
+    addSkill('.copilot/skills/bootstrap/SKILL.md', 'name: bootstrap\ndescription: Bootstrap the development workspace');
   });
 
   it('finds review skills and agents', () => {
@@ -39,6 +41,10 @@ describe('repo skills', () => {
 
   it('finds test skills', () => {
     assert.deepEqual(names(findRepoSkills(repo, 'test')), ['run-unit-tests']);
+  });
+
+  it('finds repository worktree and workspace initialization skills before building', () => {
+    assert.deepEqual(names(findRepoSkills(repo, 'worktree')), ['worktree-setup', 'bootstrap']);
   });
 
   it('finds nothing in a repo without skills', () => {

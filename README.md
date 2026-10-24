@@ -51,6 +51,14 @@ flowchart LR
 - **The approval gate.** Nothing gets built until the HLD is approved. To approve, comment `approved` on the HLD task, or mark the task Done.
 - **Hands-off after approval.**
   - ASDF writes the plan and creates the **implementation tasks** under the PBI.
+  - Before implementation starts or resumes, it reads the repo's README and
+    worktree/bootstrap, build and test skills, initializes the checkout with the
+    repo's tools, and verifies a real baseline build and tests. A failed or
+    unverified baseline stops implementation.
+  - Worktrees are preferred. If worktree creation or initialization fails,
+    ASDF can use the configured source checkout on the item's feature branch
+    from freshly fetched `origin/main` or `origin/master`. The source must be
+    clean and unreserved; existing changes and commits are never reset.
   - It implements each task with a fresh subagent and reviews it.
   - It runs a self-review: its own reviewer, plus every review skill your repo provides.
   - Then it opens the PR.
@@ -72,7 +80,11 @@ flowchart LR
 - GitHub Copilot CLI or the GitHub Copilot app.
 - **Node.js 22.18 or later**, installed before you install the plugin, with `node` on your PATH. Check with `node --version`. ASDF's hooks and CLI are TypeScript that Node runs directly, so there's nothing to build and no packages to install.
 - git on your PATH.
-- Local checkouts of the repos ASDF works on (workspaces), such as `C:\src\Payments`. For each item, ASDF makes a git worktree from the workspace, so your own checkout isn't touched. It never searches the disk for repos, and never clones one.
+- Local checkouts of the repos ASDF works on (workspaces), such as `C:\src\Payments`.
+  ASDF normally creates an isolated worktree. Its validated initialization
+  fallback temporarily uses a clean source checkout on an item feature branch,
+  preserves the previous branch/commit, and restores it after merge. It never
+  searches the disk for repos or clones one.
 - **ADO access through MCP when work needs it.** ASDF discovers available tools
   in the running host, including existing local ADO servers and shared services
   that accept an organization parameter. You do not need a new server per org

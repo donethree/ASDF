@@ -1,4 +1,4 @@
-// Skills and agents a repo provides, found by kind (review, build, test).
+// Skills and agents a repo provides, found by kind.
 import { existsSync, readdirSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
 import { fail, readLines, same, type Json } from './util.ts';
@@ -7,6 +7,7 @@ const KIND_PATTERNS: Record<string, RegExp> = {
   review: /\breview/i,
   build: /\bbuild/i,
   test: /\b(unit )?tests?\b/i,
+  worktree: /\bworktrees?\b|\b(?:bootstrap|initializ\w*|setup)\b.*\b(?:repo(?:sitory)?|workspace|development)\b|\b(?:repo(?:sitory)?|workspace|development)\b.*\b(?:bootstrap|initializ\w*|setup)\b/i,
 };
 
 // The simple "key: value" lines of a Markdown file's frontmatter, keyed in lower case.
@@ -42,10 +43,10 @@ function entries(folder: string, directories: boolean): string[] {
 
 export function findRepoSkills(repoPath: string, kindName: string): Json[] {
   const kind = Object.keys(KIND_PATTERNS).find((k) => same(k, kindName));
-  if (!kind) fail('ASDF_BAD_ARGUMENT', `-Kind must be review, build or test, not '${kindName}'`);
+  if (!kind) fail('ASDF_BAD_ARGUMENT', `-Kind must be review, build, test or worktree, not '${kindName}'`);
   const root = resolve(repoPath);
   const found: { name: string; description: string; path: string; type: string }[] = [];
-  for (const folder of [join(root, '.github', 'skills'), join(root, '.agents', 'skills'), join(root, '.claude', 'skills')]) {
+  for (const folder of ['.github', '.agents', '.claude', '.copilot'].map((name) => join(root, name, 'skills'))) {
     for (const name of entries(folder, true)) {
       const file = join(folder, name, 'SKILL.md');
       if (!existsSync(file)) continue;

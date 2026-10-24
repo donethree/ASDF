@@ -15,11 +15,11 @@ its provenance without fabricating a PR thread or approval vote.
 
 **Before feedback work:** reuse the item operation owner and get the PR's current status. A completed PR goes to `merged` and ownership-checked close-out, even after reassignment. Otherwise verify the governing item is still yours before further work; an abandoned PR posts a blocker and goes to `blocked`. Terminal PRs receive no pushes or thread/status edits. Repeat this status check immediately before each push or PR mutation. If completion raced with a local fix, preserve that unmerged work and report it rather than claiming it shipped.
 
-For active-PR code work, refresh the execution context and follow `asdf:using-asdf`'s Code execution context contract. Validate edit paths, load applicable target-repo instructions, bind each build/Git command to codeRoot, and refresh before commits or pushes. A missing/mismatched worktree blocks rather than falling back to the launcher or original checkout.
+For active-PR code work, refresh the execution context and follow `asdf:using-asdf`'s Code execution context contract. Validate edit paths, load applicable target-repo instructions, bind each build/Git command to codeRoot, and refresh before commits or pushes. A missing/mismatched checkout blocks rather than choosing another location; source mode must already be explicitly recorded.
 
 1. **Auto-complete first.** If the item came from `merging`, auto-complete is already set. Cancel it before anything else: `repo_pull_request_write update`, with `autoComplete=false`.
 2. **Each active thread whose last comment is human.** Evaluate it with the rigor below, then do exactly one of these:
-   - **Fix it.** Work in the worktree with TDD, run the covering tests, commit, and push with `git -C "<codeRoot>" push origin <repo.branch>`. Push only repo.branch. Never force-push. Then reply `[ASDF] Fixed in <sha7>: <what changed>` and set the thread status to `fixed`. Mark a thread Fixed only after the fix is pushed.
+   - **Fix it.** Work in the verified codeRoot with TDD, run the covering tests, commit, and push with `git -C "<codeRoot>" push origin <repo.branch>`. Push only repo.branch. Never force-push. Then reply `[ASDF] Fixed in <sha7>: <what changed>` and set the thread status to `fixed`. Mark a thread Fixed only after the fix is pushed.
    - **Push back or ask.** Reply `[ASDF] <technical reasoning or question>` and leave the thread active for the reviewer.
 3. **A failed build.** Read the logs (`pipelines_build_log`), find the cause (`asdf:systematic-debugging`), fix it, and push.
 4. **A merge conflict.** Merge the default branch into the item's branch (`git -C "<codeRoot>" merge origin/<default branch>`). Resolve, retest, and push. Never rebase, never force-push.
