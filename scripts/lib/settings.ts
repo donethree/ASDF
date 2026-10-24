@@ -107,7 +107,9 @@ export function checkConfig(config: Json): string[] {
   for (const org of orgs) {
     const name = prop(org, 'org');
     if (!name) errors.push('every org needs an org name');
-    if (!prop(org, 'mcpServer')) errors.push(`org '${name ?? ''}' needs an mcpServer`);
+    const hint = prop(org, 'mcpServer');
+    if (hint !== undefined && (typeof hint !== 'string' || !hint.trim()
+      || /[\u0000-\u001f\u007f]/.test(hint))) errors.push(`org '${name ?? ''}' has an invalid mcpServer hint`);
     const projects = toList(prop(org, 'projects'));
     if (projects.length === 0) errors.push(`org '${name ?? ''}' needs at least one project`);
     for (const project of projects) {

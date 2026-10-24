@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { checkConfig, validateContextPath } from './settings.ts';
 import { parseOrganization, parseProject, parseWatchSource, prepareRepository, sameSource } from './setupInputs.ts';
-import { addMcpEntry, findMcpMatches, loadSetup, prepareSetupSave, saveSetup, selectContext, sameSetupPath, type LoadedSetup, type SetupPaths, type SetupWritePlan } from './setupState.ts';
+import { addMcpEntry, findMcpMatches, loadSetup, loadSetupMcp, prepareSetupSave, saveSetup, selectContext, sameSetupPath, type LoadedSetup, type SetupPaths, type SetupWritePlan } from './setupState.ts';
 import { EXAMPLES, SetupBack, SetupCancelled, type SetupIO } from './setupPrompt.ts';
 import { configRecord, configText, type OrgConfig, type ProjectIdentity, type ProjectConfig, type WatchSource } from './watchScopes.ts';
 import { AsdfError, fail, same } from './util.ts';
@@ -69,7 +69,7 @@ export async function runSetup(io: SetupIO, paths?: SetupPaths): Promise<SetupRe
     const existing = config().orgs.find(o => same(o.org, org));
     if (existing) return existing;
     if (!await yes(`The URL identifies organization "${org}". Add it?`)) throw new SetupBack();
-    const entry = { org, mcpServer: '', projects: [] };
+    const entry: OrgConfig = { org, projects: [] };
     config().orgs.push(entry);
     return entry;
   };
@@ -123,7 +123,7 @@ export async function runSetup(io: SetupIO, paths?: SetupPaths): Promise<SetupRe
       async () => {
         const { org } = await enter();
         if (config().orgs.some(o => same(o.org, org))) fail('ASDF_SETUP_DUPLICATE', 'organization already exists; use Edit');
-        config().orgs.push({ org, mcpServer: '', projects: [] });
+        config().orgs.push({ org, projects: [] });
         io.write(`Added organization ${org}.\n`);
       },
       async index => {
@@ -131,7 +131,7 @@ export async function runSetup(io: SetupIO, paths?: SetupPaths): Promise<SetupRe
         if (old.projects.length || config().workspaces.some(w => same(w.org, old.org))) fail('ASDF_SETUP_IN_USE', 'edit/remove this organization\'s projects and repositories before renaming it; MCP selection has its own step');
         const { org } = await enter();
         if (config().orgs.some((o, i) => i !== index && same(o.org, org))) fail('ASDF_SETUP_DUPLICATE', 'organization already exists');
-        config().orgs[index] = { org, mcpServer: '', projects: [] };
+        config().orgs[index] = { org, projects: [] };
       },
       index => {
         const org = config().orgs[index];
@@ -243,14 +243,16 @@ export async function runSetup(io: SetupIO, paths?: SetupPaths): Promise<SetupRe
     }, config().userName);
   };
   const mcp = async () => {
-    io.write('\nMCP entries are configured locally only. No server, login or connectivity check will run.\n');
+    io.write('\nOptional MCP configuration. ASDF discovers available ADO tools at runtime, including local servers.\nSkip this if your host already provides ADO access. No server, login or connectivity check will run.\n');
+    if (!await yes('Configure local MCP entries in this wizard?')) return;
+    const entries = loadSetupMcp(loaded);
     for (const org of config().orgs) {
-      const matches = findMcpMatches(loaded.draft.mcp, org.org);
+      const matches = findMcpMatches(entries, org.org);
       let name: string;
       if (!matches.length) {
         name = await validated(`MCP server entry name for ${org.org}:`, plain, `ado-${org.org}`);
         io.write(`Proposed entry: ${name}\n${JSON.stringify({ type: 'http', url: `https://mcp.dev.azure.com/${encodeURIComponent(org.org)}`, headers: { 'X-MCP-Insiders': 'true' }, tools: ['*'] }, null, 2)}\n`);
-        if (!await yes('Add this local MCP entry when you save?')) { io.write('Entry not added; return to MCP setup before Save.\n'); continue; }
+        if (!await yes('Add this local MCP entry when you save?')) { io.write('Entry not added; runtime discovery will be used.\n'); continue; }
       } else if (matches.length === 1) {
         name = matches[0];
         io.write(`Using existing ${name} for ${org.org}.\n`);
@@ -260,7 +262,7 @@ export async function runSetup(io: SetupIO, paths?: SetupPaths): Promise<SetupRe
         if (index < 0) continue;
         name = matches[index];
       }
-      const servers = configRecord(loaded.draft.mcp.mcpServers, 'mcpServers');
+      const servers = configRecord(entries.mcpServers, 'mcpServers');
       if (Object.hasOwn(servers, name)) {
         const server = configRecord(servers[name], name);
         if (typeof server.url === 'string') {
@@ -291,7 +293,7 @@ export async function runSetup(io: SetupIO, paths?: SetupPaths): Promise<SetupRe
     for (const warning of loaded.pluginWarnings) io.write(`Warning: ${warning}\n`);
     await section(0);
     await section(8);
-    for (let i = 1; i < 8; i++) await section(i);
+    for (let i = 1; i < 7; i++) await section(i);
     for (;;) {
       let preview: SetupWritePlan | undefined;
       try {
@@ -304,13 +306,13 @@ export async function runSetup(io: SetupIO, paths?: SetupPaths): Promise<SetupRe
       }
       io.write(`\nReview draft\nContext: ${loaded.draft.contextPath || '(required)'}\nWorktree parent: ${config().worktreeRoot || '(required)'}\nUser: ${config().userName}\n`);
       for (const org of config().orgs) {
-        io.write(`Organization: ${org.org}; MCP: ${org.mcpServer || '(not selected)'}\n`);
+        io.write(`Organization: ${org.org}; MCP: runtime discovery${org.mcpServer ? ` (hint: ${org.mcpServer})` : ''}\n`);
         for (const project of org.projects) io.write(`  Project: ${project.project}; watches: ${project.watchScopes.length}\n`);
       }
       for (const workspace of config().workspaces) io.write(`Repository: ${workspace.org}/${workspace.project}/${workspace.repo} - ${workspace.path}\n`);
       for (const watch of watches()) io.write(`Watch: ${watchLabel(watch)}\n`);
-      io.write(`Types: ${JSON.stringify(config().workItemTypes)}\nFiles: ${loaded.paths.settingsFile}; ${join(loaded.draft.contextPath, 'asdf.config.json')}; ${loaded.paths.mcpFile}\n`);
-      const choice = await number('1) Save configuration\n2) Context\n3) Organizations\n4) Projects\n5) Repositories\n6) Backlogs/watches\n7) Types\n8) Branch user name\n9) MCP entries\n10) Worktree parent\n0) Cancel setup', 10);
+      io.write(`Types: ${JSON.stringify(config().workItemTypes)}\nFiles: ${loaded.paths.settingsFile}; ${join(loaded.draft.contextPath, 'asdf.config.json')}${loaded.draft.mcp !== null ? `; ${loaded.paths.mcpFile}` : ''}\n`);
+      const choice = await number('1) Save configuration\n2) Context\n3) Organizations\n4) Projects\n5) Repositories\n6) Backlogs/watches\n7) Types\n8) Branch user name\n9) MCP entries (optional)\n10) Worktree parent\n0) Cancel setup', 10);
       if (choice === 0) throw new SetupCancelled();
       if (choice !== 1) { await section(choice - 2); continue; }
       if (!preview) { io.write('Correct the draft before saving.\n'); continue; }

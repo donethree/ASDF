@@ -3,7 +3,7 @@ import { fail } from './util.ts';
 
 export type WatchScope = { kind: 'project'; areaPaths: string[] } | { kind: 'team'; team: string };
 export type ProjectConfig = { project: string; watchScopes: WatchScope[] };
-export type OrgConfig = { org: string; mcpServer: string; projects: ProjectConfig[] };
+export type OrgConfig = { org: string; mcpServer?: string; projects: ProjectConfig[] };
 export type AsdfConfig = {
   schemaVersion: 2; userName: string; orgs: OrgConfig[];
   workItemTypes: { parent: string[]; task: string[]; feature: string[] };
@@ -58,7 +58,8 @@ export function normalizeConfig(input: unknown): AsdfConfig {
     });
     if (!projects.length) fail('ASDF_CONFIG_INVALID', 'every org needs at least one project');
     unique(projects.map(p => p.project), 'project');
-    return { ...org, org: configText(org.org, 'org'), mcpServer: configText(org.mcpServer, 'mcpServer'), projects };
+    return { ...org, org: configText(org.org, 'org'),
+      ...(org.mcpServer === undefined ? {} : { mcpServer: configText(org.mcpServer, 'mcpServer') }), projects };
   });
   if (!orgs.length) fail('ASDF_CONFIG_INVALID', 'orgs must list at least one org');
   unique(orgs.map(o => o.org), 'organization');

@@ -34,7 +34,7 @@ describe('public ASDF launcher', () => {
     const repo = newWorkspace(join(home, 'Payments'), 'https://dev.azure.com/contoso/Commerce/_git/Payments');
     const settings = join(home, '.copilot', 'asdf', 'settings.json');
     const answers = [context, process.platform === 'win32' ? 'C:\\w' : '/tmp/w', '1', 'contoso', 'n', '1', 'contoso/Commerce', 'n',
-      '1', repo, 'n', '1', 'contoso/Commerce', 'n', 'n', '4', 'jdoe', '', 'y', '1'];
+      '1', repo, 'n', '1', 'contoso/Commerce', 'n', 'n', '4', 'jdoe', '1'];
     const result = spawnSync(process.execPath, [join(REPO, 'asdf.js'), '--init'], {
       env: { ...process.env, HOME: home, USERPROFILE: home, ASDF_SETTINGS: settings },
       input: answers.join('\n') + '\n', encoding: 'utf8',
@@ -42,6 +42,6 @@ describe('public ASDF launcher', () => {
     assert.equal(result.status, 0, result.stderr + result.stdout);
     assert.equal(JSON.parse(readFileSync(settings, 'utf8')).contextPath, context);
     assert.equal(JSON.parse(readFileSync(join(context, 'asdf.config.json'), 'utf8')).userName, 'jdoe');
-    assert.equal(JSON.parse(readFileSync(join(home, '.copilot', 'mcp-config.json'), 'utf8')).mcpServers['ado-contoso'].type, 'http');
+    assert.equal(existsSync(join(home, '.copilot', 'mcp-config.json')), false);
   });
 });

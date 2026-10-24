@@ -44,8 +44,13 @@ before code work; this session's artifact cwd is never the code root.
 Completed ledger tasks stay completed even if old chat says otherwise.
 
 Check the required ASDF skills are enabled and resolve to this plugin before
-loading them. Check the org's ADO MCP tools, including WIQL, in this worker
-process. A missing/disabled/wrong-source skill, sign-in issue or missing host
+loading them. Discover ADO tools in this worker process using
+`asdf:ado-work-items`, when a step needs ADO access (including WIQL for tracked
+assignment). The request's optional mcpServer is a hint; neither an absent hint
+nor a different tool prefix is failure. Verify the actual target org/project
+through the required reads; the parent session's tool routing is not evidence
+that the child has access. A missing/disabled/wrong-source skill, actual ADO
+access/capability failure or missing host
 permission is an infrastructure failure. Do not enable skills, widen directory
 access, change permissions or substitute another plugin. `--no-ask-user`
 does not approve tools. Never use `az` or REST for ADO.

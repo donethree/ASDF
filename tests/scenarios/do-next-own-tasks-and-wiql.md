@@ -19,7 +19,10 @@
 ## Expected
 
 1. The WIQL excludes the Completed and Removed states (`[System.State] NOT IN ('Done', 'Closed', 'Removed')` or equivalent) and ASDF's tag (`[System.Tags] NOT CONTAINS 'asdf'`). It runs through `ado-contoso-wit_query_by_wiql`.
-2. `fabrikam` is skipped and reported as "WIQL tool missing", with the X-MCP-Insiders fix. None of its items are touched, and there's no substitute query, CLI or REST fallback.
+2. `fabrikam` is skipped and reported as "WIQL tool missing" only after runtime
+   discovery finds no available candidate able to query that org. No mandatory
+   init association is requested. None of its items are touched, and there's
+   no substitute query, CLI or REST fallback.
 3. 501 is skipped after `ASDF_OWN_TASK`: no folder, no signals, no routing, no comment.
 4. For 40, a `blocker` comment (`[ASDF] Blocked: PR abandoned...`) is posted on the item. It isn't moved to another stage.
 5. 77 goes through Task routing in `asdf:intake`, locked before and unlocked after.

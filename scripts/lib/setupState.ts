@@ -10,7 +10,7 @@ import { isLiveReserved, parseLiveWatch } from './liveWatch.ts';
 
 export type SetupPaths = { settingsFile: string; mcpFile: string; copilotSettingsFile: string };
 export type FileSnapshot = { path: string; content: string | null };
-export type SetupDraft = { contextPath: string; config: AsdfConfig; mcp: Record<string, unknown> };
+export type SetupDraft = { contextPath: string; config: AsdfConfig; mcp: Record<string, unknown> | null };
 export type LoadedSetup = { paths: SetupPaths; snapshots: FileSnapshot[]; originalContext: string | null;
   originalConfig: AsdfConfig | null; draft: SetupDraft; pluginWarnings: string[] };
 export type PlannedWrite = FileSnapshot & { nextContent: string };
@@ -60,9 +60,9 @@ export function loadSetup(paths: SetupPaths = {
   settingsFile: settingsPath(), mcpFile: join(homedir(), '.copilot', 'mcp-config.json'),
   copilotSettingsFile: join(homedir(), '.copilot', 'settings.json'),
 }): LoadedSetup {
-  paths = { settingsFile: canonical(paths.settingsFile), mcpFile: canonical(paths.mcpFile), copilotSettingsFile: canonical(paths.copilotSettingsFile) };
+  paths = { ...paths, settingsFile: canonical(paths.settingsFile), copilotSettingsFile: canonical(paths.copilotSettingsFile) };
   const loaded: LoadedSetup = { paths, snapshots: [], originalContext: null, originalConfig: null,
-    draft: { contextPath: '', mcp: { mcpServers: {} }, config: {
+    draft: { contextPath: '', mcp: null, config: {
       schemaVersion: 2, userName: userInfo().username, orgs: [], workItemTypes: structuredClone(DEFAULT_TYPES),
       workspaces: [], lockStaleMinutes: 90, maxQuestionsPerRound: 4,
     } }, pluginWarnings: [] };
@@ -77,10 +77,6 @@ export function loadSetup(paths: SetupPaths = {
     if (config.content !== null) loaded.originalConfig = normalizeConfig(record(config.content, config.path));
     if (loaded.originalConfig) loaded.draft.config = structuredClone(loaded.originalConfig);
   }
-  const mcp = snapshot(loaded, paths.mcpFile);
-  if (mcp.content !== null) loaded.draft.mcp = record(mcp.content, mcp.path);
-  if (loaded.draft.mcp.mcpServers === undefined) loaded.draft.mcp.mcpServers = {};
-  mcpServers(loaded.draft.mcp);
   const plugins = { path: paths.copilotSettingsFile, content: setupStore.read(paths.copilotSettingsFile) };
   if (plugins.content !== null) {
     const settings = record(plugins.content, plugins.path);
@@ -93,6 +89,17 @@ export function loadSetup(paths: SetupPaths = {
     }
   }
   return loaded;
+}
+
+export function loadSetupMcp(loaded: LoadedSetup): Record<string, unknown> {
+  if (loaded.draft.mcp !== null) return loaded.draft.mcp;
+  const file = snapshot(loaded, loaded.paths.mcpFile);
+  const mcp = file.content === null ? { mcpServers: {} } : record(file.content, file.path);
+  if (mcp.mcpServers === undefined) mcp.mcpServers = {};
+  mcpServers(mcp);
+  loaded.paths.mcpFile = file.path;
+  loaded.draft.mcp = mcp;
+  return mcp;
 }
 
 export function selectContext(loaded: LoadedSetup, path: string): LoadedSetup {
@@ -124,8 +131,9 @@ export function findMcpMatches(mcp: Record<string, unknown>, org: string): strin
 
 export function addMcpEntry(draft: SetupDraft, org: string, name: string): void {
   if (!name.trim() || /[\u0000-\u001f\u007f]/.test(name) || ['__proto__', 'constructor', 'prototype'].includes(name)) fail('ASDF_SETUP_INPUT_INVALID', 'enter a valid MCP server name');
-  const servers = mcpServers(draft.mcp);
-  if (Object.hasOwn(servers, name) && !findMcpMatches(draft.mcp, org).includes(name)) {
+  const mcp = configRecord(draft.mcp, 'optional MCP draft');
+  const servers = mcpServers(mcp);
+  if (Object.hasOwn(servers, name) && !findMcpMatches(mcp, org).includes(name)) {
     fail('ASDF_SETUP_MCP_COLLISION', `${name} is already used by another server`);
   }
   if (!Object.hasOwn(servers, name)) {
@@ -185,8 +193,8 @@ function preserveConnections(config: AsdfConfig, previous: AsdfConfig | null, it
     let org = config.orgs.find(o => same(o.org, id.org));
     if (!org) {
       const old = previous?.orgs.find(o => same(o.org, id.org));
-      if (!old) fail('ASDF_SETUP_IN_USE', `unfinished work needs an MCP association for ${id.org}`);
-      org = { org: old.org, mcpServer: old.mcpServer, projects: [] };
+      if (!old) fail('ASDF_SETUP_IN_USE', `unfinished work needs its organization ${id.org}`);
+      org = { org: old.org, ...(old.mcpServer === undefined ? {} : { mcpServer: old.mcpServer }), projects: [] };
       config.orgs.push(org);
     }
     if (!org.projects.some(p => same(p.project, id.project))) org.projects.push({ project: id.project, watchScopes: [] });
@@ -215,23 +223,18 @@ export function prepareSetupSave(input: LoadedSetup): SetupWritePlan {
       if (!workspace || !sameSetupPath(workspace.path, item.repo.clonePath)) fail('ASDF_SETUP_IN_USE', `item ${item.id} still needs its recorded checkout`);
     }
   }
-  for (const org of draft.config.orgs) {
-    if (!findMcpMatches(draft.mcp, org.org).includes(org.mcpServer)) fail('ASDF_SETUP_MCP_REQUIRED', `choose or approve a local MCP entry for ${org.org}`);
-    const server = configRecord(mcpServers(draft.mcp)[org.mcpServer], org.mcpServer);
-    if (typeof server.url === 'string') {
-      const headers = configRecord(server.headers ?? {}, 'headers');
-      const insider = Object.keys(headers).filter(k => k.toLowerCase() === 'x-mcp-insiders');
-      if (insider.length !== 1 || headers[insider[0]] !== 'true') fail('ASDF_SETUP_MCP_REQUIRED', `approve the Insiders header for ${org.mcpServer}`);
-    }
-  }
   const settings = snapshot(loaded, loaded.paths.settingsFile);
-  const mcp = snapshot(loaded, loaded.paths.mcpFile);
   const writes: PlannedWrite[] = [];
   const plan = (s: FileSnapshot, value: unknown) => {
     if (s.content !== null && JSON.stringify(record(s.content, s.path)) === JSON.stringify(value)) return;
     writes.push({ ...s, nextContent: JSON.stringify(value, null, 2) + '\n' });
   };
-  plan(mcp, draft.mcp);
+  if (draft.mcp !== null) {
+    const file = snapshot(loaded, loaded.paths.mcpFile);
+    const previous = file.content === null ? {} : record(file.content, file.path);
+    previous.mcpServers ??= {};
+    if (JSON.stringify(previous) !== JSON.stringify(draft.mcp)) plan(file, draft.mcp);
+  }
   plan(target, draft.config);
   plan(settings, { ...(settings.content === null ? {} : record(settings.content, settings.path)), schemaVersion: 1, contextPath: draft.contextPath });
   return { loaded, draft, writes };

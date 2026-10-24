@@ -12,6 +12,10 @@ model CLI launches. Apply intake, do-next and ado-work-items.
 - The team source rejects @TeamAreas. Another source returns exactly 200 IDs.
 - Separately, interactive intake gets access denied and another invocation
   has no saved configuration.
+- Valid config has no mcpServer for contoso. A local host server under another
+  prefix accepts an explicit org and provides the necessary work-item/WIQL reads.
+- A saved server hint for a second org is stale, but an available shared server
+  can perform that org's reads. A child process must discover its own tools.
 
 ## Expected actions
 
@@ -24,9 +28,14 @@ model CLI launches. Apply intake, do-next and ado-work-items.
    projects. A successful assignment result keeps their current ownership.
 5. Failed/incomplete assignment batches supply no signals/snapshot updates;
    their IDs are deferred from work, even if local stage remains actionable.
-6. The live intake error identifies the actual org/project/error and asks the
-   user to confirm manual CLI values and MCP access before any mutation.
+6. Try available read-capable alternatives for the same target, verifying org/
+   project identity without changing config. Only if none works, report the
+   actual org/project/capability/error before any mutation. Suggest manual init
+   for incorrect values, not for an absent/stale MCP hint.
 7. Missing setup tells the user to run the resolved `node "<root>\asdf.js" --init`
    manually. No init skill, wizard launch by agent or special first-run check.
 8. Existing parent/task roles, In Progress gating, approval and session ownership
    rules are unchanged.
+9. No extra server setup is required when local/shared tools work. PR routing
+   uses repo.org/project independently. Failed/uncertain writes are reconciled
+   with reads before retry, never replayed through another candidate.

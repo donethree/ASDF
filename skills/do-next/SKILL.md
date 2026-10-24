@@ -77,18 +77,29 @@ logging never makes a lost/invalid worker request safe to continue.
 ## 1. Preconditions
 
 - Run `asdf.ts settings`. If settings or config are missing/invalid, report the actual error and tell the user to run `node "<plugin root>\asdf.js" --init` manually, then stop. Do not invoke a setup skill or launch the wizard unattended.
-- Run `asdf.ts config` to get the orgs, projects, MCP servers and work item types.
+- Run `asdf.ts config` to get the orgs, projects, optional MCP hints and work item types.
 - Make one owner id for this pass with `node -e "console.log(crypto.randomUUID())"`, and use it for every lock.
 
 ## 2. Which orgs can be reached
 
-For each org, check that its `<mcpServer>-wit_work_item` tool is available in this session. Skip any org whose Azure DevOps MCP server is unavailable, and report it.
+For each org needed by this pass, follow `asdf:ado-work-items` runtime discovery
+for required work-item and WIQL reads. A saved mcpServer is optional; discover
+local/remote host tools by capability and verify the target org through the
+required reads. Missing or stale hints do not skip an org when another available
+server can access it. Do not run a separate connection test or require init
+before using available tools.
+
+Skip any org whose Azure DevOps MCP server is unavailable, and report it.
+Only skip after no discovered candidate can perform the required reads.
 
 - The org's items stay untouched.
-- The summary names the org/server and says to confirm the values with `node "<plugin root>\asdf.js" --init` and verify the MCP has access to ADO. Include the actual error rather than assuming every failure is a sign-in issue.
+- The summary names the org/server/capability and actual error. Suggest manual init for incorrect source values; otherwise identify the runtime access problem, not a missing init association. Do not assume every failure is a sign-in issue.
 - Never fall back to the `az` CLI or REST calls.
 
-Skip any org without a WIQL tool, and report it. The tool is `<mcpServer>-wit_query_by_wiql`, or `wit_query` with a `wiql` action on older local servers. The org's items stay untouched; report the missing capability with the manual setup/MCP access guidance above.
+Skip any org without a WIQL tool, and report it. Discover a WIQL-capable tool for
+that org by schema (for example `wit_query_by_wiql`, or `wit_query` with a `wiql`
+action); do not require those exact names or a specific prefix. The org's items
+stay untouched if no candidate supports the query.
 
 ## 3. Sync
 

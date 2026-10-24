@@ -21,7 +21,7 @@ export type SessionBinding = {
 export type WorkerRequest = {
   schemaVersion: 1; backend: 'copilot-cli'; item: ItemIdentity; sessionId: string;
   runId: string; owner: string; passId: string; expectedStage: string;
-  artifactRoot: string; mcpServer: string; cli: { executable: string; script: string }; pluginRoot: string;
+  artifactRoot: string; mcpServer?: string; cli: { executable: string; script: string }; pluginRoot: string;
 };
 export type WorkerAcknowledgement = {
   schemaVersion: 1; runId: string; owner: string; sessionId: string;
@@ -105,10 +105,11 @@ export function validateRequest(id: number, value: unknown): WorkerRequest {
   const cli = object(v.cli);
   check(v.schemaVersion === 1 && v.backend === 'copilot-cli' && uuid(v.sessionId) && uuid(v.runId)
     && v.owner === v.runId && text(v.passId) && text(v.expectedStage) && text(v.artifactRoot)
-    && v.artifactRoot === artifactPath(id) && text(v.mcpServer) && text(v.pluginRoot)
+    && v.artifactRoot === artifactPath(id) && (v.mcpServer === undefined || text(v.mcpServer)) && text(v.pluginRoot)
     && text(cli.executable) && text(cli.script), 'invalid worker request');
   return { schemaVersion: 1, backend: 'copilot-cli', item, sessionId: v.sessionId, runId: v.runId, owner: v.owner,
-    passId: v.passId, expectedStage: v.expectedStage, artifactRoot: v.artifactRoot, mcpServer: v.mcpServer,
+    passId: v.passId, expectedStage: v.expectedStage, artifactRoot: v.artifactRoot,
+    ...(v.mcpServer === undefined ? {} : { mcpServer: v.mcpServer }),
     cli: { executable: cli.executable, script: cli.script }, pluginRoot: v.pluginRoot };
 }
 

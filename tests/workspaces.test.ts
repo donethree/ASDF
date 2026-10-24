@@ -16,6 +16,7 @@ describe('convertRemoteUrl', () => {
     ['git@ssh.dev.azure.com:v3/contoso/Commerce/Payments', 'contoso/Commerce/Payments'],
     ['contoso@vs-ssh.visualstudio.com:v3/contoso/Commerce/Payments', 'contoso/Commerce/Payments'],
     ['https://dev.azure.com/contoso/My%20Project/_git/My%20Repo', 'contoso/My Project/My Repo'],
+    ['https://onedrive.visualstudio.com/SharePoint%20Online/_git/SPO.Core', 'onedrive/SharePoint Online/SPO.Core'],
   ];
   for (const [url, expected] of remotes) {
     it(`reads ${url}`, () => {

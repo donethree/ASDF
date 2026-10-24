@@ -53,7 +53,7 @@ export async function runWorker(input: { id: number; passId: string }, executabl
     }
     const config = getConfig();
     const org = config.orgs.find((o: { org: string }) => o.org.toLowerCase() === String(state.org).toLowerCase());
-    if (!org?.mcpServer) fail('ASDF_WORKER_MCP_UNAVAILABLE', 'work-item organization has no configured MCP server');
+    if (!org) fail('ASDF_CONFIG_INVALID', 'work-item organization is not configured');
     withItemGuard(id, () => {
       const previous = listRuns(id);
       if (previous.some(r => !r.endedAt || r.termination === 'unknown')) {
@@ -64,7 +64,7 @@ export async function runWorker(input: { id: number; passId: string }, executabl
       const pluginRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
       const request: WorkerRequest = { schemaVersion: 1, backend: 'copilot-cli', item: binding.item,
         sessionId: binding.sessionId, runId: owner, owner, passId, expectedStage: state.stage,
-        artifactRoot: artifactPath(id), mcpServer: org.mcpServer, pluginRoot,
+        artifactRoot: artifactPath(id), ...(org.mcpServer === undefined ? {} : { mcpServer: org.mcpServer }), pluginRoot,
         cli: { executable: process.execPath, script: resolve(pluginRoot, 'scripts', 'asdf.ts') } };
       run = { schemaVersion: 1, request, state: 'reserved', cliMode: binding.provisioning === 'confirmed' || past.some(r => r.termination !== 'not-started') ? 'resume' : 'create',
         startedAt: new Date().toISOString(), endedAt: null, host: hostname(), runnerPid: process.pid, childPid: null,

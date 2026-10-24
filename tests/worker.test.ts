@@ -39,6 +39,15 @@ describe('persistent item runner', () => {
     assert.ok(transcript.args.includes('--resume'));
     assert.equal(transcript.args.includes('--session-id'), false);
   });
+  it('leaves MCP discovery to the item session when no server hint was configured', async () => {
+    const config = getConfig();
+    delete config.orgs[0].mcpServer;
+    setConfig(config);
+    const result = await runWorker({ id: 42, passId: 'runtime-discovery' }, fakeExecutable('worker'));
+    assert.equal(result.status, 'completed', JSON.stringify(result));
+    assert.equal(listRuns(42)[0].request.mcpServer, undefined);
+    assert.equal(result.toStage, 'awaiting-answers');
+  });
 
   it('defers competing workers without a second CLI launch', async () => {
     const first = runWorker({ id: 42, passId: 'pass-a' }, fakeExecutable('worker-hold'));

@@ -22,7 +22,7 @@ flowchart LR
     skills["Skills"]
     cli["CLI and its TypeScript library"]
     ctx[("asdf-context folder")]
-    mcp["Azure DevOps MCP server<br>(one per org)"]
+    mcp["Available Azure DevOps MCP tools<br>(local or remote)"]
     ado[("Azure DevOps")]
     wt["git worktree<br>(branch user/name/id-slug)"]
 
@@ -39,7 +39,11 @@ flowchart LR
 
 Five constraints shape the design:
 
-- **ADO is reached only through the Azure DevOps MCP server**, one server per org. Skills call its tools as `<mcpServer>-<tool>`, never the `az` CLI or REST calls, and the guard blocks both. Code moves with `git`.
+- **ADO is reached only through the Azure DevOps MCP server**. Skills discover
+  available tools at runtime by capability and verify the target org/project;
+  one server may serve several orgs. Saved `mcpServer` values are optional
+  preference hints, not fixed prefixes. Never use `az` CLI or REST calls; the
+  guard blocks both. Code moves with `git`.
 - **Nothing ASDF writes goes into the product repo** except code on its `user/<userName>/<id>-<slug>` branches. Designs, plans, questions, decisions, reviews and state live in asdf-context; code worktrees use the separately configured short parent folder.
 - **ASDF never searches the disk for code.** An item's code is in one of the workspaces (local checkouts) listed at init. The work item names its package, and ASDF matches it to a workspace.
 - **Unattended runs retain host permissions.** Required approvals must be configured through normal host controls; the guard hook is supplementary, not a sandbox or permission bypass. Unattended skills never call `ask_user`; questions go to ADO as comments.
@@ -110,6 +114,10 @@ not change workflow state, approvals or permissions.
 [`asdf.js`](asdf.js) dispatches `--init` to the deterministic numbered wizard.
 It is not a skill and never invokes a model, MCP server, login or ADO request.
 Other arguments retain the existing JSON CLI behavior.
+MCP preparation is a review-menu opt-in, not a required section. Default setup
+neither reads nor snapshots `mcp-config.json`; unrelated external MCP edits
+cannot invalidate that draft. `loadSetupMcp` loads/snapshots it only on explicit
+opt-in, retaining concurrency and rollback checks for approved edits.
 
 | Module | Responsibility |
 |---|---|
@@ -133,6 +141,13 @@ save with item creation, lock acquisition and short state mutations, always
 before an item guard. Active/unresolved operations and disruptive changes to
 unfinished context/checkout/branch dependencies block saving, not running work.
 Existing JSON CLI setters remain available for programmatic callers.
+Org configuration and worker requests accept an absent `mcpServer` while still
+validating any supplied hint. Old requests/configs retain their values without
+forcing local entry creation. The Node runner does not check host MCP access;
+each worker skill discovers its own tools when needed. Skills verify relevant
+reads before writes, try existing alternative candidates on read/access failure,
+and reconcile uncertain write outcomes rather than replaying them on another
+server. Actual inaccessible operations report their target/capability/error.
 
 `discovery-sources` enumerates explicit watches; `discovery-query` verifies the
 source snapshot/index and generates its escaped query. `assignment-query`
@@ -336,7 +351,7 @@ Flags that `do-next` writes by hand (`assignedToMe`, `lastCommentIsAsdf`, `merge
 
 ```mermaid
 flowchart TD
-    check["settings, config,<br>an owner id for this pass"] --> orgs{"each org: MCP server signed in,<br>WIQL tool available?"}
+    check["settings, config,<br>an owner id for this pass"] --> orgs{"each org: discovered MCP reads<br>and WIQL usable?"}
     orgs -->|no| skip["skip the org, and report it"]
     orgs -->|yes| sync["Scoped discovery and tracked assignment<br>item-new, item.md, signals"]
     sync --> queue["asdf.ts queue"]
@@ -347,7 +362,9 @@ flowchart TD
 ```
 
 1. **Check.** `asdf.ts settings` and `config`, and one owner id for every lock this pass takes.
-2. **Reach each org.** Skip, and report, any org whose MCP server isn't signed in or has no WIQL tool. Its items stay untouched.
+2. **Reach each org.** Discover work-item/WIQL tools in the running host; use saved
+   hints only as preferences and verify target identity through required reads.
+   Skip/report only when no candidate can perform the operation. Its items stay untouched.
 3. **Sync.**
    - Paginated queries discover open assigned work from explicit project/team scopes, leaving out ASDF's own tasks (tag `asdf`). Failed scopes are reported, not widened.
    - Separate paginated queries for tracked IDs determine assignment without team/area/type/tag/completed filters, including projects without watches. An incomplete/failed batch is unknown and its items receive no signals or work that pass.
@@ -562,7 +579,7 @@ Conventions:
 ```
 ~\.copilot\asdf\settings.json    the context folder's path (the ASDF_SETTINGS environment variable overrides where this file lives)
 <asdf-context>\
-  asdf.config.json               orgs, MCP servers, projects, work item types, workspaces, user name, limits
+  asdf.config.json               orgs, optional MCP hints, projects, work item types, workspaces, user name, limits
   memory\org-<org>\project-<project>\repo-<repo>.md
                                 one entry per merged item, scoped to the full repository identity
   # The item's code worktree is elsewhere: <worktreeRoot>\<six-character-name>

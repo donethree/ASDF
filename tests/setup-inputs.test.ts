@@ -48,4 +48,12 @@ describe('guided setup inputs', () => {
       assert.equal(prepareRepository(`https://dev.azure.com/contoso/Commerce/_git/Payments${suffix}`, path).repo, 'Payments');
     }
   });
+  it('matches legacy encoded project URLs to either spelling of the checkout origin', () => {
+    const legacy = 'https://onedrive.visualstudio.com/SharePoint%20Online/_git/SPO.Core';
+    for (const origin of [legacy, 'https://dev.azure.com/onedrive/SharePoint%20Online/_git/SPO.Core']) {
+      const path = newWorkspace(join(newFolder(), 'SPO.Core'), origin);
+      assert.deepEqual(prepareRepository(legacy, path),
+        { path, name: 'SPO.Core', org: 'onedrive', project: 'SharePoint Online', repo: 'SPO.Core' });
+    }
+  });
 });

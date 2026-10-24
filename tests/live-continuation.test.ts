@@ -10,7 +10,7 @@ import { newItem, setItem, setItemStage } from '../scripts/lib/items.ts';
 import { lockItem, unlockItem } from '../scripts/lib/lock.ts';
 import { bindLiveSchedule, enterLiveCheck, finishLiveCheck, prepareLiveWait, stopLiveWatch, suspendLiveWatch } from '../scripts/lib/liveContinuation.ts';
 import { readLiveWatch, writeLiveWatch } from '../scripts/lib/liveWatch.ts';
-import { addMcpEntry, loadSetup, prepareSetupSave } from '../scripts/lib/setupState.ts';
+import { loadSetup, prepareSetupSave } from '../scripts/lib/setupState.ts';
 import { settingsPath } from '../scripts/lib/settings.ts';
 import { newContext, REPO, runCli } from './helpers.ts';
 
@@ -95,7 +95,6 @@ describe('interactive check lifecycle', () => {
     const watch = arm(start);
     const settingsFile = settingsPath();
     const loaded = loadSetup({ settingsFile, mcpFile: join(dirname(settingsFile), 'mcp.json'), copilotSettingsFile: join(dirname(settingsFile), 'copilot.json') });
-    addMcpEntry(loaded.draft, 'contoso', 'ado-contoso');
     assert.throws(() => prepareSetupSave(loaded), { code: 'ASDF_SETUP_IN_USE' });
     writeLiveWatch(42, { ...readLiveWatch(42)!, expiresAt: new Date(Date.now() - 1).toISOString() });
     assert.doesNotThrow(() => prepareSetupSave(loaded));

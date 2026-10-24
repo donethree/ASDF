@@ -68,11 +68,17 @@ describe('config', () => {
     }
   });
 
-  it('requires an org with an MCP server and a project, and positive limits', () => {
+  it('requires an organization and positive limits without requiring an MCP binding', () => {
     assert.ok(checkConfig({ ...getConfig(), orgs: [] }).includes('orgs must list at least one org'));
     assert.ok(checkConfig({ ...getConfig(), lockStaleMinutes: 0 }).includes('lockStaleMinutes must be a positive number'));
-    const noMcpServer = { ...sampleConfig([ctx.workspace]), orgs: [{ org: 'contoso', projects: [{ project: 'Storage' }] }] };
-    assert.throws(() => setConfig(noMcpServer), { code: 'ASDF_CONFIG_INVALID', message: /mcpServer/ });
+    const noMcpServer = { ...getConfig(), orgs: [{ org: 'contoso',
+      projects: [{ project: 'Storage', watchScopes: [{ kind: 'project', areaPaths: [] }] }] }] };
+    assert.deepEqual(checkConfig(noMcpServer), []);
+    assert.equal(setConfig(noMcpServer).orgs[0].mcpServer, undefined);
+    for (const mcpServer of ['', '  ', 42, {}]) {
+      assert.throws(() => setConfig({ ...noMcpServer, orgs: [{ ...noMcpServer.orgs[0], mcpServer }] }),
+        { code: 'ASDF_CONFIG_INVALID', message: /mcpServer/ });
+    }
   });
 
   it('stores each workspace with the repo it holds', () => {

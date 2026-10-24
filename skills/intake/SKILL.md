@@ -11,11 +11,16 @@ Every piece of ASDF work hangs off an Azure DevOps work item. This skill finds t
 
 1. If settings/config are missing or invalid, tell the user to run `node "<plugin root>\asdf.js" --init` manually and stop. Init is not a skill; do not launch an interactive wizard from this session.
 2. Get the work item: an id or URL from the prompt, or ask with `ask_user`. If the user cannot name a Feature, PBI, User Story, or Task, stop and say so. ASDF never creates work items on its own, and never starts work without one.
-3. Resolve the org and project from the URL. With only an id, try each configured org's MCP server (`asdf.ts config`) and ask if more than one matches.
+3. Resolve the org and project from the URL. With only an id, discover ADO tools
+   for each configured org (`asdf.ts config`, `asdf:ado-work-items`) and ask if
+   more than one matches. No saved mcpServer is required; a stale hint does not
+   preclude another available local/remote server. Verify the response's target
+   org/project before proceeding.
    If the actual lookup fails, stop before item/state/code/ADO writes. Include
-   the org/project and returned error, and use `ask_user` to ask the user to
-   confirm the values through `node "<plugin root>\asdf.js" --init` and verify
-   the configured MCP has ADO access. Do not assume every failure is login
+   the org/project and returned error after trying valid discovered alternatives.
+   Use `ask_user` for the actual unresolved access/routing problem; suggest
+   manual init only when org/project values need correction, not because the
+   optional server hint is absent. Do not assume every failure is login
    related, invent an empty result, change permissions, or fall back to REST.
    An explicit item may be outside discovery watch scopes; ownership and
    configured-org/workspace rules still apply.

@@ -76,11 +76,15 @@ The session context gives you three lines:
 
 In ASDF's skills, `asdf.ts <command>` is short for that CLI line. Use the CLI for all ASDF state: item folders, stages, locks, the work queue, ADO signals, and the SDD workspace. Never edit `state.json` by hand. The CLI prints JSON and exits 1 with `{"error": ...}` on failure. If settings or config are missing, tell the user to run `node "<plugin root>\asdf.js" --init` manually and stop. Never launch the interactive wizard from a skill or automation.
 
-Setup writes local configuration only. During an actual ADO fetch, report the
-specific failing org/project/team and server error. In a live session ask the
-user to confirm values in the manual setup CLI and verify MCP access to ADO.
-Unattended runs report that guidance without asking chat questions or changing
-business stages. There is no separate first-run verification workflow.
+Setup writes local configuration only; MCP preparation is optional and skipped
+by default. Discover host-provided ADO tools at runtime using
+`asdf:ado-work-items`, including local servers without a saved mcpServer hint.
+Only report an access problem when a required operation has no usable candidate.
+Include the actual org/project/team, capability and server error. In a live
+session clarify that problem; manual init is for correcting setup values,
+not for supplying a mandatory server association. Unattended runs report it
+without chat questions or changing business stages. There is no separate
+first-run verification workflow.
 
 `task-done` also exits nonzero when its test command fails; its JSON keeps `exitCode`, `log` and `recorded`. Completion requires exit 0 and `recorded: true`.
 

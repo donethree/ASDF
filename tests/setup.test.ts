@@ -17,13 +17,29 @@ function paths(root: string) {
 }
 
 describe('numbered setup wizard', () => {
+  it('onboards a visualstudio repository without MCP questions or files', async () => {
+    const root = newFolder();
+    const context = join(root, 'context');
+    const url = 'https://onedrive.visualstudio.com/SharePoint%20Online/_git/SPO.Core';
+    const repo = newWorkspace(join(root, 'SPO.Core'), url);
+    const script = scenario([context, SHORT_ROOT, '1', 'https://onedrive.visualstudio.com', 'n',
+      '1', 'https://onedrive.visualstudio.com/SharePoint%20Online', 'n',
+      '1', url, repo, 'n', '1', 'onedrive/SharePoint%20Online', 'n', 'n', '4', 'jdoe', '1']);
+    assert.equal((await runSetup(script.io, paths(root))).status, 'saved', script.output());
+    assert.equal(script.remaining(), 0, script.output());
+    const config = JSON.parse(readFileSync(join(context, 'asdf.config.json'), 'utf8'));
+    assert.deepEqual(config.workspaces, [{ path: repo, name: 'SPO.Core', org: 'onedrive', project: 'SharePoint Online', repo: 'SPO.Core' }]);
+    assert.equal(config.orgs[0].mcpServer, undefined);
+    assert.equal(existsSync(paths(root).mcpFile), false);
+    assert.equal(script.output().includes('MCP server entry name for'), false);
+  });
   it('collects a separate short worktree parent during init', async () => {
     const root = newFolder();
     const context = join(root, 'context');
     const worktreeRoot = process.platform === 'win32' ? join(parse(root).root, 'w') : '/tmp/w';
     const repo = newWorkspace(join(root, 'Payments'), 'https://dev.azure.com/contoso/Commerce/_git/Payments');
     const script = scenario([context, worktreeRoot, '1', 'contoso', 'n', '1', 'contoso/Commerce', 'n', '1', repo, 'n',
-      '1', 'contoso/Commerce', 'n', 'n', '4', 'jdoe', '', 'y', '1']);
+      '1', 'contoso/Commerce', 'n', 'n', '4', 'jdoe', '1']);
     assert.equal((await runSetup(script.io, paths(root))).status, 'saved', script.output());
     const saved = JSON.parse(readFileSync(join(context, 'asdf.config.json'), 'utf8'));
     assert.equal(saved.worktreeRoot, worktreeRoot);
@@ -36,7 +52,7 @@ describe('numbered setup wizard', () => {
     const context = join(root, 'context');
     const repo = newWorkspace(join(root, 'Payments'), 'https://dev.azure.com/contoso/Commerce/_git/Payments');
     const script = scenario([context, join(drive, 'w'), SHORT_ROOT, '1', 'contoso', 'n', '1', 'contoso/Commerce', 'n', '1', repo, 'n',
-      '1', 'contoso/Commerce', 'n', 'n', '4', 'jdoe', '', 'y', '1']);
+      '1', 'contoso/Commerce', 'n', 'n', '4', 'jdoe', '1']);
     assert.equal((await runSetup(script.io, paths(root))).status, 'saved', script.output());
     assert.equal(JSON.parse(readFileSync(join(context, 'asdf.config.json'), 'utf8')).worktreeRoot, SHORT_ROOT);
     assert.match(script.output(), /Error:/);
@@ -54,9 +70,7 @@ describe('numbered setup wizard', () => {
       'https://dev.azure.com/fabrikam/Inventory/_git/Inventory', inventory, 'n',
       '1', 'https://dev.azure.com/contoso/Commerce/_backlogs/backlog/Data%20Movement/Features?showParents=false', 'y',
       'fabrikam/Inventory', 'n', 'n',
-      '4', 'jdoe',
-      '', 'y', '', 'y',
-      '1',
+      '4', 'jdoe', '1',
     ]);
     const result = await runSetup(script.io, paths(root));
     assert.equal(result.status, 'saved', script.output());
@@ -93,7 +107,7 @@ describe('numbered setup wizard', () => {
       '1', 'contoso/Commerce', 'n',
       '1', repo, 'n',
       '1', 'contoso/Commerce', 'n', 'n',
-      '4', 'jdoe', '', 'y', '1',
+      '4', 'jdoe', '1',
     ]);
     assert.equal((await runSetup(script.io, paths(root))).status, 'saved', script.output());
     assert.equal(JSON.parse(readFileSync(join(context, 'asdf.config.json'), 'utf8')).orgs.length, 1);
@@ -115,7 +129,7 @@ describe('numbered setup wizard', () => {
     const context = join(root, 'context');
     const repo = newWorkspace(join(root, 'Payments'), 'https://dev.azure.com/contoso/Commerce/_git/Payments');
     const script = scenario([context, SHORT_ROOT, '1', 'contoso', 'n', '1', 'contoso/Commerce', 'n',
-      '1', repo, 'n', '1', 'contoso/Commerce', 'n', 'n', '4', 'jdoe', '', 'y', '1']);
+      '1', repo, 'n', '1', 'contoso/Commerce', 'n', 'n', '4', 'jdoe', '1']);
     const read = script.io.readLine;
     script.io.readLine = async () => {
       if (script.output().includes('1) Save configuration')) {
@@ -133,7 +147,7 @@ describe('numbered setup wizard', () => {
     const repo = newWorkspace(join(root, 'Payments'), 'https://dev.azure.com/contoso/Commerce/_git/Payments');
     const team = (name: string) => `https://dev.azure.com/contoso/Commerce/_backlogs/backlog/${encodeURIComponent(name)}/Features`;
     const script = scenario([context, SHORT_ROOT, '1', 'contoso', 'n', '1', 'contoso/Commerce', 'n', '1', repo, 'n',
-      '1', team('Old'), 'n', '4', 'jdoe', '', 'y',
+      '1', team('Old'), 'n', '4', 'jdoe',
       '6', '2', '1', team('Data Movement'), '1', team('Other'), 'y', team('Third'), 'n',
       '6', '3', '2', 'y', '4', '1']);
     assert.equal((await runSetup(script.io, paths(root))).status, 'saved', script.output());
@@ -147,7 +161,7 @@ describe('numbered setup wizard', () => {
     const repo = newWorkspace(join(root, 'Payments'), 'https://dev.azure.com/contoso/Commerce/_git/Payments');
     const team = (name: string) => `https://dev.azure.com/contoso/Commerce/_backlogs/backlog/${name}/Features`;
     const first = scenario([context, SHORT_ROOT, '1', 'contoso', 'n', '1', 'contoso/Commerce', 'n', '1', repo, 'n',
-      '1', team('Old'), 'n', '4', 'jdoe', '', 'y', '1']);
+      '1', team('Old'), 'n', '4', 'jdoe', '1']);
     assert.equal((await runSetup(first.io, paths(root))).status, 'saved');
     const edit = scenario(['', '', '4', '4', '4', '1', team('New'), 'n', '4', 'newuser', '2', '', '1']);
     assert.equal((await runSetup(edit.io, paths(root))).status, 'saved', edit.output());
@@ -162,11 +176,26 @@ describe('numbered setup wizard', () => {
     const context = join(root, 'context');
     const repo = newWorkspace(join(root, 'Payments'), 'https://dev.azure.com/contoso/Commerce/_git/Payments');
     const first = scenario([context, SHORT_ROOT, '1', 'contoso', 'n', '1', 'contoso/Commerce', 'n', '1', repo, 'n',
-      '1', 'contoso/Commerce', 'n', 'n', '4', 'jdoe', '', 'y', '1']);
+      '1', 'contoso/Commerce', 'n', 'n', '4', 'jdoe', '1']);
     assert.equal((await runSetup(first.io, paths(root))).status, 'saved');
     const edit = scenario(['', '', '4', '4', '2', '1', '', '', '4', '4', '4', '', '1']);
     assert.equal((await runSetup(edit.io, paths(root))).status, 'saved', edit.output());
     assert.ok(edit.output().includes(`[${repo}]`));
     assert.equal(JSON.parse(readFileSync(join(context, 'asdf.config.json'), 'utf8')).workspaces[0].path, repo);
+  });
+  it('writes MCP configuration only when an optional entry is approved', async () => {
+    for (const action of ['skip', 'add', 'decline']) {
+      const root = newFolder();
+      const context = join(root, 'context');
+      const repo = newWorkspace(join(root, 'Payments'), 'https://dev.azure.com/contoso/Commerce/_git/Payments');
+      const script = scenario([context, SHORT_ROOT, '1', 'contoso', 'n', '1', 'contoso/Commerce', 'n', '1', repo, 'n',
+        '1', 'contoso/Commerce', 'n', 'n', '4', 'jdoe', '9',
+        ...(action === 'skip' ? ['n'] : ['y', '', action === 'add' ? 'y' : 'n']), '1']);
+      assert.equal((await runSetup(script.io, paths(root))).status, 'saved', script.output());
+      assert.equal(script.remaining(), 0, script.output());
+      assert.equal(existsSync(paths(root).mcpFile), action === 'add', action);
+      const saved = JSON.parse(readFileSync(join(context, 'asdf.config.json'), 'utf8'));
+      assert.equal(saved.orgs[0].mcpServer, action === 'add' ? 'ado-contoso' : undefined);
+    }
   });
 });

@@ -7,12 +7,42 @@ description: Use when reading or writing Azure DevOps work items, comments, atta
 
 Every ASDF read or write in Azure DevOps (ADO) follows this skill. ADO is reached only through the Azure DevOps MCP server: never the `az` CLI, never REST calls. Code moves with `git`; everything else goes through MCP.
 
-## The MCP server for each org
+## Discover ADO access at runtime
 
-- `asdf.config.json` (`asdf.ts config`) lists each org with its `mcpServer`. That server's tools are named `<mcpServer>-<tool>`, for example `ado-contoso-wit_work_item`.
-- **Pull requests live in the item's repo.** Every pull request call uses the item's repo: repo.org, repo.project and repo.name. Use the MCP server of `repo.org`; the repo's project can differ from the work item's.
-- Match tools by capability, not exact name. Server versions differ, so use whichever available tool does the job.
-- If an org's tools are missing (the server isn't configured, or it needs an interactive sign-in), say so and skip that org. Never fall back to the CLI or REST.
+Init does not require an MCP association or inspect servers by default.
+`asdf.config.json` lists orgs/projects; optional `mcpServer` is a preference
+hint, not proof of access or a required prefix.
+
+1. When an ADO operation is needed, discover the current host's available tools
+   and load their descriptions/schemas. Match the required capability, not a
+   guessed tool name. Local stdio, remote and host-provided ADO servers work.
+   Try a saved hint first if available; a missing/stale hint is not an error.
+2. Establish the target org/project from the work item or repository. For tools
+   accepting an org, pass it explicitly. For fixed-org servers, use their
+   declared binding and a successful relevant read whose identity/URLs match
+   the intended org/project. Never infer org access from a prefix alone.
+   Keep this routing only for the current process/session; rediscover in each
+   persistent child and after a server disappears or returns an access error.
+   Keep the authenticated principal consistent too. When combining or switching
+   servers for reads, `@Me` queries or writes, verify they act as the same user
+   through returned identity metadata or a discovered current-identity read.
+   Refresh assignment after a routing change; do not reuse another principal's
+   `@Me` result. If identity cannot be established, defer affected mutations.
+3. Use the read already needed by the step to verify access; no separate init
+   or first-run connection test. If a hint/candidate is unavailable, lacks the
+   capability or fails a read, try other already-available candidates that can
+   target the same org. Verify their identity too. Never retry an uncertain
+   write through another server: read/reconcile its effects before any retry.
+4. If no candidate can perform the required operation, report the actual
+   org/project, attempted server/capability and returned error (or missing
+   capability). Leave affected items untouched; do not infer empty results,
+   reassignment or approval. In live work ask for routing clarification when
+   identity is ambiguous; unattended work reports/defer without a chat question.
+   Valid ASDF setup needs no re-init just because
+   no server hint is saved. Never enable servers, alter permissions or rewrite
+   MCP configuration automatically; never fall back to CLI or REST.
+
+**Pull requests live in the item's repo.** Every pull request call uses the item's repo: repo.org, repo.project and repo.name. Discover access for `repo.org` independently; the repo's org/project may differ from the work item's.
 
 | Capability | Tool | Actions |
 |---|---|---|
@@ -27,6 +57,11 @@ Every ASDF read or write in Azure DevOps (ADO) follows this skill. ADO is reache
 | Builds and logs | `pipelines_build`, `pipelines_build_log` | |
 | Repositories | `repo_repository` | |
 | Identities (for @-mentions) | The work item's `System.AssignedTo` identity; `core_get_identity_ids` where the server has it | |
+
+Tool/action names in the table and recipes are capability examples. Use the
+actual discovered schema's equivalent operations and argument names, never a
+guessed prefix or action. Required query scope, ownership and paging remain
+unchanged across server implementations.
 
 ## Items assigned to you
 
@@ -64,14 +99,14 @@ Project sources use their explicit area paths; empty area paths means whole proj
 
 - The tag filter leaves out the tasks ASDF creates. ASDF's own HLD, Review and implementation tasks are never items of their own.
 - Before tracking results, classify parent and Feature items first. Exclude child HLD/Design/Breakdown tasks by the title/tag conventions below, including untagged hand-made tasks. An independent Task is absorbed by its tracked PBI only before work starts, and only while that PBI is neither paused nor done. Unstarted means tracked/new/awaiting-parent with no posted HLD round, approval request/version, worktree or PR. Preserve already-started standalone workflows, including their feedback and close-out; never silently hide them when the parent is tracked later. Explicitly recorded HLD/Review/implementation roles remain managed children.
-- If an org has no WIQL tool, skip that org and report it; never mark its items unassigned. Direct the user to check `node "<plugin root>\asdf.js" --init` and verify that the configured MCP has ADO/WIQL access.
+- If an org has no WIQL tool, skip that org and report it; never mark its items unassigned. This means no discovered candidate can run the required query for that org, not that a saved prefix is absent. Report the actual capability/access problem; suggest manual init only for incorrect org/project/team values, not for a missing hint.
 
 ### Refresh assignment for tracked work
 
 Group tracked, not-done items by their recorded org/project, including projects
 with no watch scopes and explicitly intaken projects outside those scopes.
-Their org must still have a configured MCP; missing orgs are reported and left
-untouched.
+Their org must still be configured in ASDF and accessible through a discovered
+MCP tool; unknown or inaccessible orgs are reported and left untouched.
 
 For each group, batch at most 200 tracked IDs in a JSON array file. Run
 `asdf.ts assignment-query -Org <org> -Project <project> -File "<tracked-ids.json>" -AfterId 0`,

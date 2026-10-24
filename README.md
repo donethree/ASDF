@@ -73,15 +73,24 @@ flowchart LR
 - **Node.js 22.18 or later**, installed before you install the plugin, with `node` on your PATH. Check with `node --version`. ASDF's hooks and CLI are TypeScript that Node runs directly, so there's nothing to build and no packages to install.
 - git on your PATH.
 - Local checkouts of the repos ASDF works on (workspaces), such as `C:\src\Payments`. For each item, ASDF makes a git worktree from the workspace, so your own checkout isn't touched. It never searches the disk for repos, and never clones one.
-- The **Azure DevOps MCP server** for each Azure DevOps org. ASDF reaches Azure DevOps only through it, never through the `az` CLI or REST calls. Add one entry per org under `mcpServers` in `~/.copilot/mcp-config.json` (the manual setup CLI offers to prepare it):
+- **ADO access through MCP when work needs it.** ASDF discovers available tools
+  in the running host, including existing local ADO servers and shared services
+  that accept an organization parameter. You do not need a new server per org
+  or a saved server association to complete init. ASDF uses MCP, never the `az`
+  CLI or REST calls.
+
+  The wizard's optional **MCP entries** review menu can prepare a remote entry
+  if you want one, but is skipped by default. Runtime errors identify the actual
+  org, capability and access failure; unattended runs leave affected items alone.
+
+  If you choose that optional remote setup, the wizard proposes:
 
   ```json
   "ado-contoso": { "type": "http", "url": "https://mcp.dev.azure.com/contoso", "headers": { "X-MCP-Insiders": "true" }, "tools": ["*"] }
   ```
 
-  The `X-MCP-Insiders` header turns on `wit_query_by_wiql`, the WIQL query tool ASDF uses to find the items assigned to you. The remote server offers it only with that header.
-
-  Sign in once in an interactive session. Unattended runs skip any MCP server that still needs a sign-in.
+  The Insiders header enables the remote server's WIQL capability. Existing
+  local or host-provided tools need no such entry from ASDF.
 
 ## Install
 
@@ -130,6 +139,11 @@ spaces and commas in a path are literal, not separators.
    locally; it never clones. Browser view parameters such as `?path=/src` or
    `?version=GBmain` do not change the repository identity. You can also start
    with an existing checkout path; editing offers the saved values as defaults.
+   Legacy URLs such as
+   `https://onedrive.visualstudio.com/SharePoint%20Online/_git/SPO.Core`
+   also work: organization `onedrive`, project `SharePoint Online`, repo
+   `SPO.Core`. The matching checkout may use either the legacy or dev.azure.com
+   spelling of its origin.
 4. **Backlogs/project watches:** paste a team URL such as
    `https://dev.azure.com/contoso/Commerce/_backlogs/backlog/Data%20Movement/Features?showParents=false`.
    It selects team `Data Movement` across supported work-item types assigned
@@ -138,10 +152,11 @@ spaces and commas in a path are literal, not separators.
    project, with optional individually entered Area Paths.
 5. **Work-item types and branch user name:** keep the shown defaults or edit
    them. `jdoe` produces branches such as `user/jdoe/12345-add-export`.
-6. **Local MCP entries:** choose existing entries or approve proposed additions/
-   Insiders-header changes. Unrelated entries and headers are preserved.
-7. **Review, then Save:** nothing is written before confirmation. `:back` returns
-   to editing; `:cancel`, Ctrl+C or EOF cancels without saving.
+6. **Review, then Save:** nothing is written before confirmation. `:back` returns
+   to editing; `:cancel`, Ctrl+C or EOF cancels without saving. Menu **9: MCP
+   entries (optional)** can prepare local MCP configuration, but is not part of
+   the required questions. Without opting in, init does not inspect, validate,
+   create or update `mcp-config.json`. Existing MCP settings stay untouched.
 
 The config is `<context>\asdf.config.json`; its pointer stays in
 `~/.copilot/asdf/settings.json`, never `~/.asdf`. Only configs with numeric
@@ -150,6 +165,8 @@ Projects require explicit `watchScopes`. Custom `workItemTypes` must include
 `parent`, `task` and `feature` lists; an empty `feature` list disables Feature discovery.
 At least one repo and one watch source are required. Adding a repo does not
 subscribe its project, and a backlog does not implicitly choose a code repo.
+An org's `mcpServer` is optional. Existing values remain preference hints;
+a missing or stale hint does not block runtime discovery of another usable server.
 
 Re-run the same command to edit setup. Saving refuses active/unresolved item
 operations and changes that would strand unfinished context, checkout or branch
@@ -158,10 +175,12 @@ permissions. Concurrent edits to configuration files involved in the save and
 partial write failures are reported. General Copilot preferences are read only
 for advisory plugin warnings and do not invalidate your setup draft.
 
-ADO access is exercised during normal intake/do-next, not a separate first-run
-verification step. Fetch failures identify the actual source/error and ask you
-to check setup values and the MCP's ADO access. Unattended runs report that
-guidance without asking chat questions. If local MCP configuration changed,
+ADO access is exercised during normal intake/do-next and each item worker, not
+a separate first-run verification step. Tools are discovered by capability and
+their org/project routing is checked through the step's required reads before
+writes. Only a genuinely unavailable operation reports an access/capability
+problem; no init rerun is required just to supply a server hint. Unattended runs
+report problems without asking chat questions. If optional MCP configuration changed,
 an already-running Copilot session may need its normal MCP reload.
 
 ## Daily use
@@ -393,7 +412,7 @@ To check that it works, ask Copilot to run `echo ASDF-GUARD-SELFTEST`. It should
 
 ```
 <context>\
-  asdf.config.json        orgs, projects, MCP servers, work item types, workspaces, user name
+  asdf.config.json        orgs, projects, optional MCP hints, work item types, workspaces, user name
   memory\org-<org>\project-<project>\repo-<repo>.md
                          merged items and decisions, isolated by full repository identity
   # Code worktrees are separate: <worktreeRoot>\<six-character-name>
@@ -430,7 +449,11 @@ Use `asdf.ts memory-path -Org <org> -Project <project> -Repo <repo>` for the enc
 - **ASDF doesn't seem active in a session.** Its hooks run on Node.js. Check that `node --version` prints 22.18 or later in a new terminal, and that the plugin is enabled (`/plugin`).
 - **"ASDF is not initialized".** Run `node "<plugin root>\asdf.js" --init` manually.
 - **The `do-next` summary says "sign-in needed".** Open an interactive Copilot session so that org's Azure DevOps MCP server can sign in (`/mcp`).
-- **ADO lookup or WIQL failure.** Confirm org/project/team values with `node "<plugin root>\asdf.js" --init` and verify the MCP has ADO access. The wizard can prepare the Insiders header locally but does not verify connectivity. Unsupported team queries are reported without expanding scope.
+- **ADO lookup or WIQL failure.** ASDF first discovers other available tools
+  that can target the same org. If none can perform the required operation,
+  check the reported server/capability/error. Re-run init only to correct
+  org/project/team values or explicitly prepare optional MCP configuration.
+  Unsupported team queries are reported without expanding scope.
 - **An automation run stops at a permission prompt.** Configure only the required approvals through the host's normal permission controls. In sessions mode, check the child CLI separately; never disable safeguards to make it proceed.
 - **A session run fails or is incomplete.** Inspect `session-info`, the run's `stderr.log` and `events.jsonl`. Progress already recorded in state/ledger is preserved; a failed transcript export does not undo completed work.
 - **The wrong brainstorming skill runs.** Disable Superpowers or Superlite with `/plugin`.

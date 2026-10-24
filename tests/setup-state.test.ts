@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path';
 import { beforeEach, describe, it } from 'node:test';
 import { newItem, setItemRepo } from '../scripts/lib/items.ts';
 import { lockItem } from '../scripts/lib/lock.ts';
-import { addMcpEntry, findMcpMatches, loadSetup, prepareSetupSave, saveSetup, selectContext, setupStore, type LoadedSetup } from '../scripts/lib/setupState.ts';
+import { addMcpEntry, findMcpMatches, loadSetup, loadSetupMcp, prepareSetupSave, saveSetup, selectContext, setupStore, type LoadedSetup } from '../scripts/lib/setupState.ts';
 import { getConfig } from '../scripts/lib/settings.ts';
 import { newContext, newFolder, newWorkspace } from './helpers.ts';
 
@@ -14,12 +14,13 @@ describe('offline setup persistence', () => {
     const ctx = newContext();
     loaded = loadSetup({ settingsFile: ctx.settings, mcpFile: join(dirname(ctx.settings), 'mcp.json'),
       copilotSettingsFile: join(dirname(ctx.settings), 'copilot.json') });
+    loadSetupMcp(loaded);
     addMcpEntry(loaded.draft, 'contoso', 'ado-contoso');
   });
 
   it('does not write a draft and preserves unrelated MCP data on confirmed save', () => {
     assert.equal(existsSync(loaded.paths.mcpFile), false);
-    loaded.draft.mcp.unrelated = { keep: 'yes' };
+    loaded.draft.mcp!.unrelated = { keep: 'yes' };
     const plan = prepareSetupSave(loaded);
     assert.equal(existsSync(loaded.paths.mcpFile), false);
     saveSetup(plan);
@@ -27,6 +28,32 @@ describe('offline setup persistence', () => {
     assert.equal(mcp.unrelated.keep, 'yes');
     assert.equal(mcp.mcpServers['ado-contoso'].headers['X-MCP-Insiders'], 'true');
     assert.equal(getConfig().schemaVersion, 2);
+  });
+  it('saves without an MCP association or an MCP configuration file', () => {
+    const deferred = loadSetup(loaded.paths);
+    delete deferred.draft.config.orgs[0].mcpServer;
+    const plan = prepareSetupSave(deferred);
+    assert.equal(plan.writes.some(w => w.path === loaded.paths.mcpFile), false);
+    saveSetup(plan);
+    assert.equal(existsSync(loaded.paths.mcpFile), false);
+    assert.equal(getConfig().orgs[0].mcpServer, undefined);
+  });
+  it('does not inspect or rewrite unrelated MCP configuration during default init', () => {
+    const invalid = '{managed outside ASDF';
+    writeFileSync(loaded.paths.mcpFile, invalid);
+    const deferred = loadSetup(loaded.paths);
+    deferred.draft.config.userName = 'edited';
+    const plan = prepareSetupSave(deferred);
+    writeFileSync(loaded.paths.mcpFile, invalid + ' changed during init');
+    saveSetup(plan);
+    assert.equal(getConfig().userName, 'edited');
+    assert.equal(readFileSync(loaded.paths.mcpFile, 'utf8'), invalid + ' changed during init');
+  });
+  it('retains an old server hint without requiring its local MCP entry to exist', () => {
+    const deferred = loadSetup(loaded.paths);
+    saveSetup(prepareSetupSave(deferred));
+    assert.equal(getConfig().orgs[0].mcpServer, 'ado-contoso');
+    assert.equal(existsSync(loaded.paths.mcpFile), false);
   });
 
   it('finds existing local/remote entries without launching them or replacing a collision', () => {
@@ -140,6 +167,7 @@ describe('offline setup persistence', () => {
   it('accepts an empty MCP config without overwriting unrelated root properties', () => {
     writeFileSync(loaded.paths.mcpFile, '{"note":"keep"}');
     const next = loadSetup(loaded.paths);
+    loadSetupMcp(next);
     addMcpEntry(next.draft, 'contoso', 'ado-contoso');
     saveSetup(prepareSetupSave(next));
     const saved = JSON.parse(readFileSync(loaded.paths.mcpFile, 'utf8'));
