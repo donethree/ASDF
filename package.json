@@ -1,6 +1,6 @@
 {
   "name": "asdf",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "ASDF (Automated Software Development Workflow): a GitHub Copilot plugin for the Azure DevOps HLD-to-merge workflow.",
   "license": "MIT",

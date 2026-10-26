@@ -1,12 +1,10 @@
-import { existsSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { readFileSync, rmSync } from 'node:fs';
 import { homedir, userInfo } from 'node:os';
 import { isAbsolute, join, resolve } from 'node:path';
 import { atomicText, inside, physical } from './localState.ts';
-import { STAGES } from './items.ts';
 import { prepareConfig, settingsPath, validateContextPath, withSettingsGuard } from './settings.ts';
 import { configRecord, DEFAULT_TYPES, normalizeConfig, type AsdfConfig } from './watchScopes.ts';
 import { fail, same } from './util.ts';
-import { isLiveReserved, parseLiveWatch } from './liveWatch.ts';
 
 export type SetupPaths = { settingsFile: string; mcpFile: string; copilotSettingsFile: string };
 export type FileSnapshot = { path: string; content: string | null };
@@ -152,77 +150,12 @@ export function addMcpEntry(draft: SetupDraft, org: string, name: string): void 
   if (configured) configured.mcpServer = name;
 }
 
-type Dependency = { id: number; stage: string; org: string; project: string; repo: Record<string, unknown> };
-function dependencies(context: string): Dependency[] {
-  let entries;
-  try { entries = readdirSync(context, { withFileTypes: true }); }
-  catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
-    fail('ASDF_SETUP_INVALID', `cannot inspect context ${context}`);
-  }
-  const result: Dependency[] = [];
-  for (const entry of entries) {
-    if (!/^\d+-/.test(entry.name)) continue;
-    const folder = canonical(join(context, entry.name));
-    if (!inside(canonical(context), folder)) fail('ASDF_SETUP_INVALID', 'item folder escapes the context');
-    const file = join(folder, 'state.json');
-    const raw = setupStore.read(file);
-    if (raw === null) fail('ASDF_SETUP_INVALID', `missing item state: ${file}`);
-    const state = record(raw, file);
-    if (typeof state.id !== 'number' || !Number.isSafeInteger(state.id) || typeof state.stage !== 'string'
-      || !STAGES.some(s => s === state.stage) || typeof state.org !== 'string' || typeof state.project !== 'string') {
-      fail('ASDF_SETUP_INVALID', `cannot determine item safety: ${file}`);
-    }
-    if (existsSync(join(folder, '.lock')) || existsSync(join(folder, 'session', 'active-run.json'))) {
-      fail('ASDF_SETUP_IN_USE', `item ${state.id} has an active or unresolved operation; finish or recover it before saving setup`);
-    }
-    const live = setupStore.read(join(folder, 'live-watch.json'));
-    if (live !== null && isLiveReserved(parseLiveWatch(record(live, 'live-watch.json'), { id: state.id, org: state.org, project: state.project }))) {
-      fail('ASDF_SETUP_IN_USE', `item ${state.id} is reserved by an interactive session`);
-    }
-    if (state.stage !== 'done') result.push({ id: state.id, stage: state.stage, org: state.org, project: state.project,
-      repo: configRecord(state.repo, 'item repo') });
-  }
-  return result;
-}
-
-function preserveConnections(config: AsdfConfig, previous: AsdfConfig | null, items: Dependency[]): void {
-  const identities = items.flatMap(item => [{ org: item.org, project: item.project },
-    ...(typeof item.repo.org === 'string' && typeof item.repo.project === 'string' ? [{ org: item.repo.org, project: item.repo.project }] : [])]);
-  for (const id of identities) {
-    let org = config.orgs.find(o => same(o.org, id.org));
-    if (!org) {
-      const old = previous?.orgs.find(o => same(o.org, id.org));
-      if (!old) fail('ASDF_SETUP_IN_USE', `unfinished work needs its organization ${id.org}`);
-      org = { org: old.org, ...(old.mcpServer === undefined ? {} : { mcpServer: old.mcpServer }), projects: [] };
-      config.orgs.push(org);
-    }
-    if (!org.projects.some(p => same(p.project, id.project))) org.projects.push({ project: id.project, watchScopes: [] });
-  }
-}
-
 export function prepareSetupSave(input: LoadedSetup): SetupWritePlan {
   const loaded = structuredClone(input);
   const draft = loaded.draft;
   draft.contextPath = validateContextPath(draft.contextPath);
   const target = snapshot(loaded, contextFile(draft.contextPath));
-  const previous = target.content === null ? null : normalizeConfig(record(target.content, target.path));
-  const items = dependencies(draft.contextPath);
-  if (loaded.originalContext && !sameSetupPath(loaded.originalContext, draft.contextPath)) {
-    const oldItems = dependencies(loaded.originalContext);
-    if (oldItems.length) fail('ASDF_SETUP_IN_USE', `context is still needed by unfinished items: ${oldItems.map(i => i.id).join(', ')}`);
-  }
-  preserveConnections(draft.config, previous, items);
   draft.config = prepareConfig(draft.config);
-  for (const item of items) {
-    if (previous && draft.config.userName !== previous.userName && typeof item.repo.branch === 'string' && item.repo.branch) {
-      fail('ASDF_SETUP_IN_USE', `item ${item.id} still uses the current branch username`);
-    }
-    if (typeof item.repo.clonePath === 'string' && item.repo.clonePath) {
-      const workspace = draft.config.workspaces.find(w => same(w.org, item.repo.org) && same(w.project, item.repo.project) && same(w.repo, item.repo.name));
-      if (!workspace || !sameSetupPath(workspace.path, item.repo.clonePath)) fail('ASDF_SETUP_IN_USE', `item ${item.id} still needs its recorded checkout`);
-    }
-  }
   const settings = snapshot(loaded, loaded.paths.settingsFile);
   const writes: PlannedWrite[] = [];
   const plan = (s: FileSnapshot, value: unknown) => {

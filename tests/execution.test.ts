@@ -91,10 +91,10 @@ describe('item execution context', () => {
     assert.equal(packet().json.error, 'ASDF_EXECUTION_CONTEXT');
   });
 
-  it('rejects an unconfigured workspace', () => {
+  it('keeps verifying an in-flight item after its workspace is removed from configuration', () => {
     const other = newWorkspace(join(ctx.src, 'Other'), 'https://dev.azure.com/contoso/Storage/_git/Other');
     setConfig({ ...getConfig(), workspaces: [other] });
-    assert.equal(packet().json.error, 'ASDF_EXECUTION_CONTEXT');
+    assert.equal(packet().code, 0, JSON.stringify(packet().json));
   });
 
   it('rejects missing and foreign lock ownership', () => {
@@ -103,7 +103,7 @@ describe('item execution context', () => {
     assert.equal(packet().json.error, 'ASDF_LOCK_NOT_OWNER');
   });
 
-  it('does not treat the original checkout as the item worktree', () => {
+  it('rejects the original checkout while it is on another branch', () => {
     setItem(201, { repo: { worktreePath: work.workspace } });
     assert.equal(packet().json.error, 'ASDF_EXECUTION_CONTEXT');
   });
@@ -129,7 +129,17 @@ describe('item execution context', () => {
     assert.equal(packet().code, 0);
   });
 
-  it('rejects an unrelated checkout placed at the expected worktree path', () => {
+  it('accepts a separate clone of the same repository on the item branch', () => {
+    git('-C', work.workspace, 'worktree', 'remove', work.repo);
+    git('clone', '-q', work.workspace, work.repo);
+    git('-C', work.repo, 'remote', 'set-url', 'origin', 'https://dev.azure.com/contoso/Storage/_git/Storage');
+    git('-C', work.repo, 'switch', '-q', 'user/jdoe/201-orders');
+    const result = packet();
+    assert.equal(result.code, 0, JSON.stringify(result.json));
+    assert.equal(result.json.codeRoot, work.repo);
+  });
+
+  it('rejects an empty checkout placed at the expected worktree path', () => {
     git('-C', work.workspace, 'worktree', 'remove', work.repo);
     newWorkspace(work.repo, 'https://dev.azure.com/contoso/Storage/_git/Storage');
     git('-C', work.repo, 'symbolic-ref', 'HEAD', 'refs/heads/user/jdoe/201-orders');

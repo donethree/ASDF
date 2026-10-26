@@ -45,8 +45,8 @@ preflight, ownership, approval or dependency blockers.
 - **Workspace and ledger.** The workspace is the item's `sdd\` folder in the asdf-context, never the repo.
   - Use the CLI: `asdf.ts task-brief`, `asdf.ts review-package`, and `asdf.ts ledger-add -Id <id> -Text "..."`. The ledger is `<item>\sdd\ledger.md`.
   - A later `do-next` pass resumes from the ledger. A task with a `Task <N>: complete` or `Task <N> done` line is finished.
-- **The code checkout** is the item's verified `codeRoot`, set up by `asdf:using-git-worktrees`: normally a linked worktree, or a recorded source-branch fallback. Commit there. Pushing happens only in `asdf:finishing-a-development-branch`.
-- **Preflight is a gate.** On every entry and resume, before dispatching any implementation, run `asdf:using-git-worktrees` through its discovery, repository initialization and recorded baseline build/test. Read the repo's README and worktree/build/test skills even when the plan already names commands. Continue only on baseline exit 0 and `recorded: true`; an old ledger pass is not current proof. Use that skill's validated fallback if worktree initialization fails.
+- **The code checkout** is the item's verified `codeRoot`, set up by `asdf:using-git-worktrees` following the repo's README: a linked worktree, the configured checkout, or an existing branch it adopted. Commit there. Pushing happens only in `asdf:finishing-a-development-branch`.
+- **Preflight is a gate.** On every entry and resume, before dispatching any implementation, run `asdf:using-git-worktrees`: verify the recorded checkout or set one up, and reuse its recorded baseline when checkout and branch are unchanged. Continue on `recorded: true`; a red baseline is known failures listed in `<item>\known-failures.md`, not a blocker. Only failures outside that list block a task: `task-done -KnownFailure "<which known failures>"` records a task whose test log shows nothing else.
 - **Persistent entry.** When `ASDF_WORKER_REQUEST` is present, these task/review
   agents remain children of the governing item's conversation. Reuse its
   current owner, await every child, and return to `asdf:work-item` for final
@@ -159,10 +159,9 @@ digraph process {
 
 ## Setup
 
-Ensure the work happens in an isolated workspace: use
-asdf:using-git-worktrees to create one or verify the existing one, read its
-repository guidance and rerun the baseline before taking the next task.
-Only its recorded source-branch fallback may use the original checkout.
+Ensure the work happens in the item's recorded checkout: use
+asdf:using-git-worktrees to set it up or verify the existing one, following the
+repository's README, and reuse its recorded baseline when unchanged.
 Never start implementation on a main/master branch without your human
 partner's explicit consent.
 

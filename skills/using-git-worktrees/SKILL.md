@@ -5,30 +5,21 @@ description: Use when starting or resuming implementation, or when an item's wor
 
 # Using Git Worktrees (ASDF)
 
-Prefer an isolated worktree on the item's branch. If worktree creation or
-repository initialization cannot work, use the validated source-branch fallback
-below. Worktrees may live outside asdf-context, but never inside another checkout or item artifact folder.
-Manual init collects `worktreeRoot` separately from the context folder. New
-worktree paths are at most 13 characters for legacy build-root limits. A short
-example is `Q:\w\a1b2c3`; titles and work-item IDs do not lengthen the path.
+The repository's own README decides how a feature branch and checkout are made.
+ASDF follows it, then records what exists. Without README guidance, ASDF makes
+a short linked worktree from the default branch. Worktrees may live outside asdf-context, but never inside another checkout or item artifact folder.
 
-**Announce at start:** "I'm using the using-git-worktrees skill to set up the item's worktree."
+**Announce at start:** "I'm using the using-git-worktrees skill to set up the item's checkout."
 
 Hold the item operation lock from `asdf:using-asdf`. The app's selected project
-is only the launch location; fallback uses only the configured `repo.clonePath`.
-This preflight is required on every implementation entry and resume, including
-small Tasks. A previous baseline pass does not authorize a new operation.
+is only the launch location; the repository is the configured `repo.clonePath`.
 
 ## 1. Reuse what's there
 
 Run `asdf.ts item -Id <id>`. If `repo.worktreePath` is set and exists, run
-`execution-context` to verify it before reuse, wherever it is located. On
-success save the packet and continue through discovery and step 4, including
-when `checkoutMode` is `source`. A missing recorded directory can
-be a reserved path from an interrupted creation: continue to step 3 using that
-same path. Never replace an existing directory, switch its branch or move it
-automatically. A too-long existing build root needs an explicit `git worktree
-move`/record-update operation under ownership, not a drive mapping or bypass.
+`execution-context` and save the packet. On success go to step 4. A missing
+recorded directory can be a reserved path from an interrupted creation: continue
+to step 3 with that same path. Never move, reset or replace an existing checkout.
 
 ## 2. The workspace
 
@@ -37,99 +28,108 @@ The item's code is in its workspace, `repo.clonePath`: one of the local checkout
 - **If `repo.clonePath` is empty,** record it: run `asdf.ts item-repo -Id <id> -Name <package>` with the package the work item names, or a person's reply naming one.
 - **If nothing names a package with a workspace** (`ASDF_NO_WORKSPACE`): post the `blocker` comment asking which package it is, and list the configured workspaces (`asdf.ts config`) in it. Run `asdf.ts stage -Id <id> -Stage blocked -Reason "package unknown"`, and stop.
 
-## 3. Create the worktree
+## 3. Make the checkout
 
-The branch is repo.branch, set when the item was created; never name a branch yourself. It's `user/<userName>/<id>-<slug>`, the only kind of branch the guard lets you push. Below, `<workspace>` is `repo.clonePath`.
+**Read the repository's guidance first.** Read the workspace's README and the
+worktree, bootstrap, build and test documentation it links, plus its root
+instructions. Run `asdf.ts repo-skills -RepoPath "<workspace>" -Kind worktree`,
+then `-Kind build` and `-Kind test`, and read the returned skills. Also check
+host-provided skills for this repo. Do not run another repo's build skill.
 
-First check the recorded workspace is still configured and its origin identifies `repo.org`, `repo.project` and `repo.name`. Use that absolute path, not the host cwd.
+Branches must be under user/<userName>/, the only branches the guard lets ASDF push. `repo.branch` (`user/<userName>/<id>-<slug>`) is the default name.
 
-**Discover before setup, not after a failed generic build.** Read the workspace's
-README and linked worktree, bootstrap, build and test documentation, plus its
-root instructions. Run `asdf.ts repo-skills -RepoPath "<workspace>" -Kind worktree`,
-then `-Kind build` and `-Kind test`. Read applicable returned skill files and
-use their tools for checkout creation, environment initialization, build and
-tests. Also check host-provided build/test skills for this repo. Discovery
-includes `.github`, `.agents`, `.claude` and `.copilot` skill folders.
-README is required even when skills exist. Do not run another repo's build skill.
+Then pick the first case that applies:
 
-1. `asdf.ts worktree-path -Id <id> -Owner <operation owner>` reserves a stable
-   unused short path under the init-selected root and records it on the item.
-   It creates no checkout and grants no host permissions. If the old config
-   has no root, direct the user to manual `asdf.js --init`; do not guess one.
-2. `git -C "<workspace>" fetch origin`
-3. `git -C "<workspace>" symbolic-ref --short refs/remotes/origin/HEAD` prints `origin/<default branch>`.
-4. `git -C "<workspace>" worktree add "<returned path>" -b "<repo.branch>" "origin/<default branch>"`
+1. **A branch for this item already exists** (yours, or from an earlier attempt),
+   even with commits: check it out the way the README says, or use the checkout
+   it is already in. Never reset, rebase or recreate it.
+2. **The README or a repo skill documents how to start a feature branch** (its
+   own worktree script, enlistment init, a branch command, a different base such
+   as a last-known-good build branch): follow it exactly, naming the branch under
+   `user/<userName>/`. Prefer `repo.branch` unless the README needs another form.
+   Run its documented initialization in the resulting checkout.
+3. **Otherwise, the default worktree:**
+   1. `asdf.ts worktree-path -Id <id> -Owner <operation owner>` reserves a short
+      unused path under the init-selected root (at most 13 characters) and records it.
+      If the config has no root, direct the user to manual `asdf.js --init`.
+   2. `git -C "<workspace>" fetch origin`
+   3. `git -C "<workspace>" symbolic-ref --short refs/remotes/origin/HEAD` prints `origin/<default branch>`.
+   4. `git -C "<workspace>" worktree add "<returned path>" -b "<repo.branch>" "origin/<default branch>"`.
+      If the branch already exists, add the worktree on it without `-b`.
 
-- When repository tooling supplies worktree creation, use it with the reserved
-  path, recorded branch and fetched remote base instead of generic `worktree add`.
-  Run its documented initialization in the resulting checkout. Do not improvise
-  path mappings, permissions or setup that contradicts the repository instructions.
-- **If the branch already exists** (an earlier attempt), add the worktree on that branch without `-b`.
-- **Use the recorded location:** reuse the path returned by worktree-path on
-  retries. If another process occupied it, report the collision; never clear it.
-- **Verify before execution:** run `asdf.ts execution-context -Id <id> -Owner <operation owner>` and save the JSON as `<item>\execution-context.json`. An identity, branch, lock or access mismatch is a blocker, not grounds for fallback.
+For cases 1 and 2, record the checkout:
 
-### Worktree initialization failure: source-branch fallback
+```text
+asdf.ts checkout-record -Id <id> -Owner <operation owner> -Path "<checkout root>" -Reason "<README procedure or existing branch>"
+```
 
-If creation or repository bootstrap fails, retain the error and diagnose with
-`asdf:systematic-debugging`. A baseline failure caused by worktree-specific
-setup is also eligible. Do not fall back from permission/policy denial, lost
-ownership, a wrong repository, or failures in already-implemented code.
+It checks the origin is the item's repository, that a branch under
+`user/<userName>/` is checked out, and that no unfinished item uses that
+checkout. It records the branch and folder as they are; it switches, resets and
+moves nothing. In-place use of the configured checkout is allowed this way.
 
-1. Re-read assignment and heartbeat. In the configured workspace run
-   `git -C "<workspace>" fetch origin`; stop if it fails. Select the existing
-   fetched `origin/main`, or `origin/master` if main is absent. Never use a local
-   main/master or stale refs after a failed fetch.
-2. Run `asdf.ts source-fallback -Id <id> -Owner <operation owner> -BaseRef "<origin/main or origin/master>" -Reason "<initialization failure>"`.
-   It requires a clean source checkout, reserves it against other fallback
-   items, and creates `repo.branch` from that remote base. It preserves the
-   source checkout's previous branch/commit. An existing item branch is usable
-   only at exactly that base, with no pending changes. A clean fresh worktree
-   is detached, not deleted; dirty or implemented branches block rather than
-   being reset. Never stash, force checkout or reset to make fallback succeed.
-3. Save the returned execution packet. Its `checkoutMode: source` explicitly
-   makes the configured workspace the writable `codeRoot`; never set this mode
-   or its evidence by hand. Re-read its README/instructions and discovered
-   skills, initialize the feature branch with the repo's documented tools,
-   then repeat the entire baseline in step 4. The failed worktree's results
-   cannot authorize implementation in the source checkout.
+Then run `asdf.ts execution-context -Id <id> -Owner <operation owner>` and save
+the JSON as `<item>\execution-context.json`. It verifies only the lock, the
+repository origin, the recorded branch and that no other unfinished item uses
+the checkout.
 
-If fallback cannot safely initialize and build, record evidence, post the
-blocker and stop. Do not cycle between locations or keep implementing.
+### When setup fails: source-branch fallback
+
+If the default worktree cannot be created or initialized (for example, the
+repo's tooling refuses linked worktrees), diagnose with `asdf:systematic-debugging`,
+then use the configured checkout instead:
+
+1. Re-read assignment and heartbeat. `git -C "<workspace>" fetch origin`.
+   Pick the fetched base the README names (for example `origin/build/main/latest`),
+   or the default branch from step 3.
+2. `asdf.ts source-fallback -Id <id> -Owner <operation owner> -BaseRef "<origin/...>" -Reason "<initialization failure>"`.
+   It switches the clean configured checkout to `repo.branch`: an existing item
+   branch is adopted as it is, with its commits; a new one starts at the base.
+   It refuses only when the checkout has uncommitted changes or a Git operation
+   in progress, or another unfinished item uses it. It never stashes, resets or
+   force-checks-out. If you, the person, already have the right branch checked
+   out, use `checkout-record` instead: it needs no clean checkout.
+3. Save the returned packet, re-read the README, initialize per its steps, and
+   run step 4 there.
 
 ## 4. Baseline
 
-Before editing code or dispatching implementation, on every entry/resume:
+Run the repository's real build and baseline tests once for each checkout and
+branch, after initialization:
 
-- Read the actual codeRoot's README, instructions and applicable worktree,
-  build and test skills; repeat discovery there if it differs from the source.
-  Complete documented environment/bootstrap steps before building.
-- Run `asdf.ts baseline -Id <id> -Owner <operation owner> -BuildCommand "<repo build command>" -TestCommand "<repo baseline test command>"`.
-  Commands run in the verified `codeRoot`, build first; a failing build skips
-  tests. Use the skill's executable commands, not a skill name as a shell command.
-  A repo with no separate build uses its documented compile/typecheck/validation
-  command; record that choice. Omit TestCommand only when the repo documents no
-  runnable baseline tests, recording why. Never substitute `echo`, a dry run,
-  guessed commands or an unrelated small test for a real build.
-- Continue only on exit 0 and `recorded: true`. Read `baseline.log` and retain
-  `baseline.json` in artifactRoot; ledger the commands, codeRoot, HEAD and result.
-  `task-start`/`task-done` and implementation `code-path` checks require this
-  operation's passing evidence. A failed retry invalidates an earlier pass.
-- A worktree-specific initialization failure uses the fallback above. Other
-  failures block with evidence. Never implement on a red or unverified baseline.
+```text
+asdf.ts baseline -Id <id> -Owner <operation owner> -BuildCommand "<repo build command>" -TestCommand "<repo baseline test command>"
+```
+
+- Use the README's or skill's executable commands, not a skill name, `echo` or
+  a dry run. A repo with no separate build uses its documented compile or
+  validation command. Omit TestCommand only when the repo documents no runnable
+  baseline tests, and say why in the ledger.
+- `recorded: true` means continue, whether it passed or not. A failing build
+  skips the tests.
+- **A red baseline is recorded as known failures**, not a blocker. Read
+  `baseline.log` and write `<item>\known-failures.md`: each failing build error
+  or test, with its file or test name. Implementation continues. Later, only
+  failures not in that list block: task-done accepts `-KnownFailure "<which
+  known failures>"` only when the baseline was red, and the PR's full-suite
+  run compares against the same list.
+- **Reuse the recorded baseline** in later sessions. `code-path`, `task-start`
+  and `task-done` accept it while the checkout and branch are unchanged and HEAD
+  descends from it. Run it again after `checkout-record` or a fallback changes
+  the checkout or branch, or when the README says setup changed.
 
 ## 5. Cleanup
 
 `asdf:finishing-a-development-branch` performs mode-aware cleanup after merge.
-Never remove a source checkout as though it were a linked worktree.
+Never remove the configured checkout or a checkout recorded with `checkout-record`.
 
-## Common rationalizations
+## Common mistakes
 
-| Excuse | Reality |
+| Mistake | Instead |
 |---|---|
-| "I'll just work in the user's checkout" | Only source-fallback can register that checkout, after clean/branch/ownership checks. |
-| "A worktree inside the repo is simpler" | It pollutes the repo. Use the separately configured short root, outside source checkouts and artifacts. |
-| "The repo isn't cloned; I'll clone it" | Big repos need their own setup. Block and ask. |
-| "I'll search the disk for the repo" | Only the workspaces listed in init. Block and ask which package. |
-| "The baseline can wait" | A dirty baseline makes every later failure ambiguous. |
-| "The last session passed" | Every entry/resume reruns the actual build in the chosen checkout. |
+| Creating a fresh ASDF branch while your branch for the item already has commits | Adopt the existing branch and record it with `checkout-record`. |
+| Ignoring the README's branch or bootstrap procedure | The README decides; ASDF records the result. |
+| Blocking because the default branch's build is red | Record known failures; only new failures block. |
+| Re-running a long build on every resume | Reuse the recorded baseline while checkout, branch and history are unchanged. |
+| Switching branches in a checkout with uncommitted work | Leave it; ask the person, or record their checked-out branch. |
+| Searching the disk for the repo | Only the workspaces listed in init. Block and ask which package. |

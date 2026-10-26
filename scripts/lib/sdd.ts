@@ -83,8 +83,9 @@ export function runBaseline(id: number, owner: string, buildCommand: string, tes
   if (!buildCommand.trim() || (testCommand !== undefined && !testCommand.trim())) fail('ASDF_BAD_ARGUMENT', 'baseline commands must not be empty');
   const file = artifactPath(id, 'baseline.json');
   const log = artifactPath(id, 'baseline.log');
+  // exitCode stays null until the run finishes, so an interrupted run is never mistaken for evidence.
   const record = { owner, codeRoot: context.codeRoot, branch: context.branch, head: context.head,
-    buildCommand, testCommand, log, passed: false, at: stamp(now()) };
+    buildCommand, testCommand, log, exitCode: null as number | null, passed: false, at: stamp(now()) };
   writeJson(file, record);
   const fd = openSync(log, 'w');
   let exitCode = 0;
@@ -100,15 +101,23 @@ export function runBaseline(id: number, owner: string, buildCommand: string, tes
   } finally { closeSync(fd); }
   const after = executionContext(id, owner, cwd);
   if (after.head !== context.head) fail('ASDF_EXECUTION_CONTEXT', 'baseline command changed HEAD; review repository initialization before continuing');
+  record.exitCode = exitCode;
   record.passed = exitCode === 0;
   writeJson(file, record);
-  return { exitCode, log, recorded: record.passed };
+  // A failing baseline is recorded as known failures; only new failures block later.
+  return { exitCode, log, recorded: true, passed: record.passed };
 }
 
-// Runs the task's test command through the system shell; only a passing run is written to the ledger.
-export function taskDone(id: number, taskNumber: number, base: string, repoPath: string, testCommand: string, owner: string): Json {
+// Runs the task's test command through the system shell. A pass is written to the ledger; so is a failure the caller
+// matches to the recorded baseline's known failures. A clean baseline leaves no known failures to match.
+export function taskDone(id: number, taskNumber: number, base: string, repoPath: string, testCommand: string, owner: string,
+  knownFailure?: string): Json {
   const context = executionContext(id, owner, repoPath);
-  requireBaseline(context);
+  const baseline = requireBaseline(context);
+  if (knownFailure !== undefined) {
+    if (!knownFailure.trim()) fail('ASDF_BAD_ARGUMENT', '-KnownFailure must name the matching baseline failures');
+    if (baseline.passed) fail('ASDF_BASELINE_PASSED', 'the recorded baseline passed, so a failing task test is a new failure');
+  }
   repoPath = shellWorkingDirectory(context.codeRoot);
   const b = resolveRef(repoPath, base);
   sddPath(id);
@@ -123,11 +132,12 @@ export function taskDone(id: number, taskNumber: number, base: string, repoPath:
     closeSync(fd);
   }
   let recorded = false;
-  if (exitCode === 0) {
+  if (exitCode === 0 || knownFailure !== undefined) {
     executionContext(id, owner, repoPath);
     const h = resolveRef(repoPath, 'HEAD');
+    const outcome = exitCode === 0 ? 'pass' : `known baseline failure: ${knownFailure!.trim()}`;
     // The line format both asdf:subagent-driven-development and asdf:executing-plans resume from.
-    ledgerAdd(id, `Task ${taskNumber}: complete (commits ${b.substring(0, 7)}..${h.substring(0, 7)}, tests: ${testCommand} → pass)`);
+    ledgerAdd(id, `Task ${taskNumber}: complete (commits ${b.substring(0, 7)}..${h.substring(0, 7)}, tests: ${testCommand} → ${outcome})`);
     recorded = true;
   }
   return { exitCode, log, recorded };

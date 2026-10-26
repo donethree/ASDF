@@ -1,6 +1,6 @@
 { "name": "asdf",
   "description": "ASDF (Automated Software Development Workflow): runs the HLD, plan, TDD, review, PR and merge cycle against Azure DevOps work items, with the steering automated.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "license": "MIT",
   "skills": "skills",
   "hooks": "hooks/hooks.json",

@@ -25,7 +25,7 @@ describe('implementation preflight', () => {
     git('-C', work.workspace, 'update-ref', `refs/remotes/origin/${branch}`, work.head);
   };
 
-  it('blocks implementation edits and task dispatch until a baseline build passes', () => {
+  it('blocks implementation edits and task dispatch until a baseline has been recorded', () => {
     writeFileSync(join(itemPath(201)!, 'plan.md'), '### Task 1: Orders\nImplement orders\n');
     assert.equal(command('code-path', '-Path', 'orders.ts').json.error, 'ASDF_BASELINE_REQUIRED');
     assert.equal(command('task-start', '-PlanPath', join(itemPath(201)!, 'plan.md'), '-TaskNumber', '1', '-RepoPath', work.repo).json.error, 'ASDF_BASELINE_REQUIRED');
@@ -49,21 +49,25 @@ describe('implementation preflight', () => {
     assert.match(readFileSync(record.log, 'utf8'), /built/);
   });
 
-  it('invalidates an earlier pass when a build fails and does not run tests', () => {
+  it('records a failing build as known failures without running tests and lets implementation continue', () => {
     assert.equal(baseline().code, 0);
     const failed = baseline('exit 7', 'echo should not run > unexpected.txt');
-    assert.equal(failed.code, 7, JSON.stringify(failed.json));
-    assert.equal(failed.json.recorded, false);
+    assert.equal(failed.code, 0, JSON.stringify(failed.json));
+    assert.equal(failed.json.recorded, true);
+    assert.equal(failed.json.passed, false);
     assert.equal(failed.json.exitCode, 7);
     assert.equal(existsSync(join(work.repo, 'unexpected.txt')), false);
-    assert.equal(command('code-path', '-Path', 'orders.ts').json.error, 'ASDF_BASELINE_REQUIRED');
+    assert.equal(JSON.parse(readFileSync(join(itemPath(201)!, 'baseline.json'), 'utf8')).passed, false);
+    assert.equal(command('code-path', '-Path', 'orders.ts').code, 0);
   });
 
-  it('requires passing baseline tests when a test command is supplied', () => {
+  it('records failing baseline tests as known failures', () => {
     const failed = baseline('echo build passed', 'exit 8');
-    assert.equal(failed.code, 8, JSON.stringify(failed.json));
-    assert.equal(failed.json.recorded, false);
-    assert.equal(command('code-path', '-Path', 'orders.ts').json.error, 'ASDF_BASELINE_REQUIRED');
+    assert.equal(failed.code, 0, JSON.stringify(failed.json));
+    assert.equal(failed.json.recorded, true);
+    assert.equal(failed.json.passed, false);
+    assert.equal(failed.json.exitCode, 8);
+    assert.equal(command('code-path', '-Path', 'orders.ts').code, 0);
   });
 
   it('does not prevent PR repairs from editing the failing implementation', () => {
@@ -71,12 +75,12 @@ describe('implementation preflight', () => {
     assert.equal(command('code-path', '-Path', 'orders.ts').code, 0);
   });
 
-  it('does not reuse evidence from an earlier operation owner', () => {
+  it('reuses recorded baseline evidence in later operations', () => {
     assert.equal(baseline().code, 0);
     unlockItem(201, work.owner);
     work.owner = 'resumed-operation';
     lockItem(201, work.owner);
-    assert.equal(command('code-path', '-Path', 'orders.ts').json.error, 'ASDF_BASELINE_REQUIRED');
+    assert.equal(command('code-path', '-Path', 'orders.ts').code, 0);
   });
 
   it('keeps a passing baseline valid for descendant implementation commits', () => {
@@ -145,21 +149,39 @@ describe('implementation preflight', () => {
     assert.equal(git('-C', work.repo, 'branch', '--show-current'), 'user/jdoe/201-orders');
   });
 
-  it('preserves dirty or already-implemented worktrees rather than restarting them', () => {
+  it('preserves a dirty worktree rather than switching its branch', () => {
     remoteBase();
     writeFileSync(join(work.repo, 'a.txt'), 'implementation\n');
     assert.equal(fallback().json.error, 'ASDF_SOURCE_FALLBACK');
-    git('-C', work.repo, 'commit', '-qam', 'implementation');
-    assert.equal(fallback().json.error, 'ASDF_SOURCE_FALLBACK');
     assert.equal(git('-C', work.repo, 'branch', '--show-current'), 'user/jdoe/201-orders');
+    assert.equal(readFileSync(join(work.repo, 'a.txt'), 'utf8'), 'implementation\n');
   });
 
-  it('rejects stale or unsupported fallback targets and wrong owners', () => {
+  it('adopts an item branch that already has commits instead of refusing or resetting it', () => {
+    remoteBase();
+    writeFileSync(join(work.repo, 'a.txt'), 'implementation\n');
+    git('-C', work.repo, 'commit', '-qam', 'implementation');
+    const implemented = git('-C', work.repo, 'rev-parse', 'HEAD');
+    const result = fallback();
+    assert.equal(result.code, 0, JSON.stringify(result.json));
+    assert.equal(git('-C', work.workspace, 'branch', '--show-current'), 'user/jdoe/201-orders');
+    assert.equal(git('-C', work.workspace, 'rev-parse', 'HEAD'), implemented);
+    assert.equal(command('execution-context').code, 0);
+  });
+
+  it('accepts any fetched remote base and rejects missing refs and wrong owners', () => {
     assert.equal(fallback().json.error, 'ASDF_SOURCE_FALLBACK');
-    remoteBase('develop');
-    assert.equal(fallback('origin/develop').json.error, 'ASDF_SOURCE_FALLBACK');
+    git('-C', work.workspace, 'update-ref', 'refs/remotes/origin/build/main/latest', work.base);
+    const owner = work.owner;
     work.owner = 'not-the-owner';
-    assert.equal(fallback().json.error, 'ASDF_LOCK_NOT_OWNER');
+    assert.equal(fallback('origin/build/main/latest').json.error, 'ASDF_LOCK_NOT_OWNER');
+    work.owner = owner;
+    git('-C', work.workspace, 'worktree', 'remove', work.repo);
+    git('-C', work.workspace, 'branch', '-D', getItem(201).repo.branch);
+    const result = fallback('origin/build/main/latest');
+    assert.equal(result.code, 0, JSON.stringify(result.json));
+    assert.equal(git('-C', work.workspace, 'rev-parse', 'HEAD'), work.base);
+    assert.equal(getItem(201).repo.sourceFallback.baseRef, 'origin/build/main/latest');
   });
 
   it('does not let a second item take over a reserved source checkout', () => {

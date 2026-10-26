@@ -118,26 +118,25 @@ For a second item (for example a new Feature), acquire its own lock before writi
 
 ## Code execution context
 
-Before every implementation entry/resume, use `asdf:using-git-worktrees` to read
-the repo's README and worktree/build/test skills, initialize its checkout and
-run a recorded baseline build/test. No implementation continues on an unverified
-or failing build. Worktree initialization failure uses only that skill's
-validated source-branch fallback from fetched origin/main or origin/master.
+Before implementation entry/resume, use `asdf:using-git-worktrees`: the repo's
+README and worktree/build/test skills decide how its checkout and branch are
+made; ASDF records the result. An existing branch for the item is adopted, not
+recreated. Its recorded baseline is reused while checkout and branch are
+unchanged; a red baseline is recorded as known failures, and only new failures block.
 
 After creating or reusing an item's code checkout, run `asdf.ts execution-context -Id <id> -Owner <operation owner>`. Save its JSON to `<item>\execution-context.json` and pass that path to every implementation, review and repair worker, including repository-provided reviewers. Inline execution uses the same contract.
 
 The packet names the item and operation owner, exact CLI executable/script,
 work-item and repository identities, original workspace, `codeRoot`,
 `checkoutMode`, `artifactRoot`, expected branch, current HEAD and target-repository
-instruction files. The original workspace is read-only in worktree mode; source
-mode authorizes only the explicitly registered feature-branch checkout. Invoke
-helpers with the packet's quoted `cli.executable` and `cli.script`, not paths
-inferred from cwd. The CLI verifies origin, Git registration, branch and held
-lock; source mode also verifies its reservation and remote-base ancestry. It
-does not change the host's cwd or grant permissions.
+instruction files. `checkoutMode` is `source` when codeRoot is the configured
+checkout itself. Invoke helpers with the packet's quoted `cli.executable` and
+`cli.script`, not paths inferred from cwd. The CLI verifies the held lock, the
+checkout's repository origin and the recorded branch, and that no other
+unfinished item uses the checkout. It does not change the host's cwd or grant permissions.
 
 - Refresh the packet at worker entry, on resume, and before commits or pushes. Compare item, repository, roots, branch and owner with the dispatch; a mismatch stops work rather than silently changing the assignment.
-- Before each code-file edit, run `asdf.ts code-path -Id <id> -Owner <operation owner> -Path "<target>"`. Relative paths are rooted at `codeRoot`, never the launcher. Use the returned absolute path in file tools. Paths outside that checkout, another item, artifacts, nested repositories or Git metadata are rejected, including directory-link escapes. During implementation, this also requires the current operation's passing baseline.
+- Before each code-file edit, run `asdf.ts code-path -Id <id> -Owner <operation owner> -Path "<target>"`. Relative paths are rooted at `codeRoot`, never the launcher. Use the returned absolute path in file tools. Paths outside that checkout, another item, artifacts, nested repositories or Git metadata are rejected, including directory-link escapes. During implementation, this also requires a recorded baseline for the checkout and branch.
 - Read `instructions.root`, applicable ancestor files from `code-path`'s `instructions.directory`, and applicable `instructions.scoped` files. Scoped entries are candidates: read their scope metadata (`applyTo` or rule paths) and apply only matches. Follow normal instruction trust and precedence; do not replace higher-priority/session rules. Report unresolved conflicts.
 - Every shell call specifies the worktree cwd, or explicitly changes to `codeRoot` within that call. Git commands use `git -C "<codeRoot>"`. A previous `cd` does not carry to the next tool call. Never infer a repo from the launch folder.
 - `codeRoot` retains the verified configured path spelling for command execution; edit-path checks use native physical paths. On Windows, `task-done` requires a drive-qualified cwd and rejects UNC cwd instead of allowing cmd to fall back elsewhere. Do not create a drive mapping or change permissions automatically.

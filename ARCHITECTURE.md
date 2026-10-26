@@ -124,7 +124,7 @@ opt-in, retaining concurrency and rollback checks for approved edits.
 | [watchScopes.ts](scripts/lib/watchScopes.ts) | Typed explicit project/team scopes, v2 config normalization and validation. |
 | [setupInputs.ts](scripts/lib/setupInputs.ts) | Local URL/identity parsing and existing checkout validation. |
 | [localState.ts](scripts/lib/localState.ts) | Shared atomic file primitives and owner-marked short directory guards. |
-| [setupState.ts](scripts/lib/setupState.ts) | Draft/snapshots, approved local MCP edits, dependency checks and conditional rollback. |
+| [setupState.ts](scripts/lib/setupState.ts) | Draft/snapshots, approved local MCP edits, configuration validation and conditional rollback. |
 | [setupPrompt.ts](scripts/lib/setupPrompt.ts) | Line-oriented terminal IO, cancellation and concrete input examples. |
 | [setup.ts](scripts/lib/setup.ts) | Add/Edit/Remove collection loops, Add-another prompts and final review/save. |
 | [discovery.ts](scripts/lib/discovery.ts) | Escaped scoped discovery queries, independent assignment queries and paging validation. |
@@ -139,9 +139,15 @@ does not imply a project-wide watch or a default mapping from backlog to repo.
 
 Setup writes only after review/confirmation. A settings-scoped guard serializes
 save with item creation, lock acquisition and short state mutations, always
-before an item guard. Active/unresolved operations and disruptive changes to
-unfinished context/checkout/branch dependencies block saving, not running work.
-Existing JSON CLI setters remain available for programmatic callers.
+before an item guard. All valid config changes are allowed regardless of active
+operations, unresolved workers, live reservations or unfinished items. Setup
+neither reads nor mutates item artifacts, locks or claims and does not restore
+removed org/project connections. Context changes update the settings pointer
+without migrating history. Item execution retains its normal ownership,
+repository and branch validation against the current configuration.
+File snapshots, atomic replacement and conditional rollback still protect
+against conflicting configuration writes. Existing JSON CLI setters remain
+available for programmatic callers.
 Org configuration and worker requests accept an absent `mcpServer` while still
 validating any supplied hint. Old requests/configs retain their values without
 forcing local entry creation. The Node runner does not check host MCP access;
@@ -453,7 +459,7 @@ A skill is invoked as `asdf:<name>`, where `<name>` is its folder. Its frontmatt
 | [`brainstorming`](skills/brainstorming/SKILL.md) | The HLD. Does the deep dive into the code, drafts the HLD, asks question rounds, records decisions with provenance, runs the [builder check](skills/brainstorming/builder-check-prompt.md) and the [code check](skills/brainstorming/code-check-prompt.md), and requests approval. | Adapted |
 | [`feature-breakdown`](skills/feature-breakdown/SKILL.md) | Breaks a Feature into PBIs: its requirements, and the PBIs in order, with question rounds and approval on a Breakdown task and a [breakdown check](skills/feature-breakdown/breakdown-check-prompt.md). Creates the PBIs, and closes the Feature once they're finished. Also makes a large PBI into a Feature. | ASDF |
 | [`writing-plans`](skills/writing-plans/SKILL.md) | After approval: `plan.md`, planning decisions (`P<n>`) and the implementation tasks. | Adapted |
-| [`using-git-worktrees`](skills/using-git-worktrees/SKILL.md) | The item's recorded worktree, on its branch (`repo.branch`), made from its workspace under the init-selected short root. Runs baseline build/test. | Adapted |
+| [`using-git-worktrees`](skills/using-git-worktrees/SKILL.md) | The item's checkout: the repo README's procedure or an adopted existing branch (recorded with `checkout-record`), else a short linked worktree. Records the baseline once per checkout; red is known failures. | Adapted |
 | [`subagent-driven-development`](skills/subagent-driven-development/SKILL.md) | Implements the plan: a fresh implementer subagent per task and a review after each. Uses the [implementer](skills/subagent-driven-development/implementer-prompt.md), [task reviewer](skills/subagent-driven-development/task-reviewer-prompt.md) and [re-review](skills/subagent-driven-development/re-review-prompt.md) prompts. | Adapted |
 | [`executing-plans`](skills/executing-plans/SKILL.md) | The same, inline, when subagents can't be dispatched. | Adapted |
 | [`test-driven-development`](skills/test-driven-development/SKILL.md) | Every code change starts with a failing test. | Copied |
@@ -494,7 +500,7 @@ How the skills fit together:
 node "<plugin root>/scripts/asdf.ts" <command> -Name value ...
 ```
 
-- **Output.** Success prints JSON on stdout and exits 0. Errors print `{"error":"ASDF_<CODE>","message":"..."}` and exit 1. An unexpected exception becomes `ASDF_INTERNAL`. `task-done` preserves its `{exitCode, log, recorded}` result and propagates a failing test's nonzero exit code; completion requires `recorded: true`.
+- **Output.** Success prints JSON on stdout and exits 0. Errors print `{"error":"ASDF_<CODE>","message":"..."}` and exit 1. An unexpected exception becomes `ASDF_INTERNAL`. `task-done` preserves its `{exitCode, log, recorded}` result; it exits 0 when recorded (a pass, or a failure matched to known baseline failures) and otherwise propagates the test's nonzero exit code.
 - **JSON input** goes in a file. `-File <path>` is the JSON input of `config-set`, `item-set` and `signals`.
 - **It never prompts.** A missing parameter is `ASDF_MISSING_ARGUMENT`, because an unattended run has nobody to answer a prompt. Parameter names are case-insensitive. An unknown parameter, or a value that should be a whole number and isn't, is `ASDF_BAD_ARGUMENT`.
 - **One table.** The command table in [`cli.ts`](scripts/lib/cli.ts) gives each command's parameters and the library function it calls, so a new command or parameter is one entry there.
@@ -511,9 +517,10 @@ node "<plugin root>/scripts/asdf.ts" <command> -Name value ...
 | `item-set` | `setItem` | `-Id -File`: deep-merges a JSON patch into `state.json`. Refuses `id`, `stage`, `resumeStage` and `stats`. |
 | `item-repo` | `setItemRepo` | `-Id -Name [-Org -Project]`: records the workspace, matched by repo name then folder name within optional identity qualifiers. Ambiguity fails explicitly. |
 | `memory-path` | `memoryPath` | `-Org -Project -Repo`: returns the qualified, filesystem-safe memory index path; creates no files. |
-| `source-fallback` | `sourceFallback` | `-Id -Owner -BaseRef -Reason`: after a successful fetch, registers the clean configured source checkout on the item branch from origin/main or origin/master; preserves its previous branch/HEAD and any clean detached worktree. Rejects dirty/implemented branches and competing source reservations. |
-| `baseline` | `runBaseline` | `-Id -Owner -BuildCommand [-TestCommand]`: runs the repo build then baseline tests in verified codeRoot, retaining baseline.json/log in artifactRoot. A failing build skips tests; failure invalidates prior evidence and exits nonzero. |
-| `execution-context` | `executionContext` | `-Id -Owner`: verifies configured repo identity, canonical item checkout, Git registration/common directory, branch and held lock. Source mode also checks reservation and recorded remote-base ancestry. Returns checkoutMode, CLI entry, roots, HEAD and instructions without granting permissions or renewing the lock. |
+| `source-fallback` | `sourceFallback` | `-Id -Owner -BaseRef -Reason`: switches the clean configured checkout to the item branch: an existing branch is adopted with its commits; a new one starts at the fetched remote base (`refs/remotes/<BaseRef>`, any branch). Preserves the previous branch/HEAD and any clean detached worktree. Rejects uncommitted changes, Git operations in progress and competing reservations; never resets or stashes. |
+| `checkout-record` | `recordCheckout` | `-Id -Owner -Path -Reason`: records a checkout made by the repo's README procedure, or an existing branch to adopt. Requires the item's repository origin, a branch under `user/<userName>/` and no other unfinished item in that checkout. Switches, resets and moves nothing. |
+| `baseline` | `runBaseline` | `-Id -Owner -BuildCommand [-TestCommand]`: runs the repo build then baseline tests in verified codeRoot, retaining baseline.json/log in artifactRoot. A failing build skips tests. Always exits 0 once recorded; `passed: false` means known failures, not a blocker. |
+| `execution-context` | `executionContext` | `-Id -Owner`: verifies the held lock, the checkout's repository origin, the recorded branch and that no other unfinished item uses the checkout. Any location and base are allowed. Returns checkoutMode (`source` when codeRoot is the configured checkout), CLI entry, roots, HEAD and instructions without granting permissions or renewing the lock. |
 | `code-path` | `codePath` | `-Id -Owner -Path`: resolves an edit target against the verified code root and returns an absolute path plus applicable directory-instruction files. Rejects escapes, metadata and nested repos. Scoped instruction files remain candidates whose scope must be evaluated by the worker. |
 | `stage` | `setItemStage` | `-Id -Stage [-Reason] [-WorkItemId]`: moves the item and records when and why. `blocked` needs `-Reason`, and records the blocker. |
 | `signals` | `invokeSignals` | `-Id -File [-Owner]`: applies rules under the supplied owner's lock; otherwise skips locked items. A waiting Feature also returns `ready`. |
@@ -523,8 +530,8 @@ node "<plugin root>/scripts/asdf.ts" <command> -Name value ...
 | `unlock` | `unlockItem` | `-Id -Owner`: releases the lock. Only its owner can. |
 | `repo-skills` | `findRepoSkills` | `-RepoPath -Kind`: the repo's own skills and agents for `review`, `build`, `test` or `worktree`, including bootstrap/setup guidance in .github, .agents, .claude and .copilot skill folders. |
 | `task-brief` | `taskBrief` | `-Id -PlanPath -TaskNumber`: cuts one task from an item-local plan into `sdd\`; rejects a foreign plan path. |
-| `task-start` | `taskStart` | `-Id -Owner -PlanPath -TaskNumber -RepoPath`: verifies the item checkout and this operation's passing baseline before producing the brief, base commit and execution context. |
-| `task-done` | `taskDone` | `-Id -Owner -TaskNumber -Base -RepoPath -TestCommand`: runs the test in the verified item worktree through the system shell (cmd on Windows, sh elsewhere). Only a pass with context still valid is written to the ledger. |
+| `task-start` | `taskStart` | `-Id -Owner -PlanPath -TaskNumber -RepoPath`: verifies the item checkout and its recorded baseline before producing the brief, base commit and execution context. |
+| `task-done` | `taskDone` | `-Id -Owner -TaskNumber -Base -RepoPath -TestCommand [-KnownFailure]`: runs the test in the verified item checkout through the system shell (cmd on Windows, sh elsewhere). A pass is written to the ledger; so is a failure with `-KnownFailure`, which is accepted only when the recorded baseline was red. |
 | `review-package` | `reviewPackage` | `-Id -Owner -RepoPath -Base -Head`: verifies the item worktree and produces commit list, stat and diff. Every Git command must succeed before an artifact is written. |
 | `ledger-add` | `ledgerAdd` | `-Id -Text`: appends a timestamped line to the ledger. |
 
@@ -573,8 +580,11 @@ Conventions:
 | `ASDF_BAD_REF`, `ASDF_TASK_NOT_FOUND` | A git ref doesn't resolve, or the plan has no task with that number. |
 | `ASDF_GIT_FAILED` | A Git command failed while generating a review package; no incomplete artifact is returned. |
 | `ASDF_EXECUTION_CONTEXT` | The recorded/configured repo, checkout registration, physical slot or branch does not match. Stop rather than switching or choosing an unregistered fallback checkout. |
-| `ASDF_SOURCE_FALLBACK` | Source fallback cannot safely create/reuse the item branch at fetched origin/main or origin/master. Preserve user files and branches; block rather than reset. |
-| `ASDF_BASELINE_REQUIRED` | Implementation needs a passing baseline for the current operation owner, codeRoot and branch, at an ancestor of current HEAD. Re-run preflight; old-operation or failed evidence is not sufficient. |
+| `ASDF_SOURCE_FALLBACK` | Source fallback cannot safely switch the configured checkout to the item branch: uncommitted changes, a Git operation in progress, an unfetched base or a competing reservation. Preserve user files and branches; block rather than reset. |
+| `ASDF_CHECKOUT_RECORD` | `checkout-record` was given a checkout of another repository, a detached HEAD, or a branch outside `user/<userName>/`. Nothing was recorded. |
+| `ASDF_CHECKOUT_IN_USE` | Another unfinished item already works in that checkout. |
+| `ASDF_BASELINE_REQUIRED` | Implementation needs a completed baseline run (passing or red) for the current checkout and branch, at an ancestor of current HEAD. Run `baseline` after changing checkout or branch. |
+| `ASDF_BASELINE_PASSED` | `task-done -KnownFailure` was used although the recorded baseline passed: the failure is new. |
 | `ASDF_CODE_PATH`, `ASDF_ARTIFACT_PATH` | A code edit or artifact path escapes the item's respective root, crosses into a nested repo, or targets Git metadata. |
 | `ASDF_BAD_ARGUMENT`, `ASDF_MISSING_ARGUMENT`, `ASDF_UNKNOWN_COMMAND` | The CLI call is malformed. |
 | `ASDF_INTERNAL` | Anything else. |
@@ -609,7 +619,7 @@ Conventions:
 | `state.json`, `.lock` | the CLI only |
 | `item.md` | `intake` and `do-next` |
 | `execution-context.json` | The controller saves `execution-context` output after worktree setup and refreshes it before dispatch/resume. Workers revalidate; it is not a host permission grant. |
-| `baseline.json`, `baseline.log` | `baseline` records the actual build/test commands, owner, codeRoot, branch, HEAD and result before implementation. Failed retries invalidate prior passes. Implementation code-path, task-start and task-done require current evidence; PR repairs can still edit broken implementation code. |
+| `baseline.json`, `baseline.log` | `baseline` records the actual build/test commands, codeRoot, branch, HEAD, exit code and result. It is reused across sessions while checkout and branch are unchanged and HEAD descends from it. A red result means known failures, summarized by the controller in `known-failures.md`; only other failures block tasks and the PR. |
 | `deep-dive.md` | `brainstorming`, or `feature-breakdown` for a Feature. `writing-plans` and `requesting-code-review` read it. |
 | `hld.md`, `questions.md`, `decisions.md` | `brainstorming`. `writing-plans`, the implementation skills and `requesting-code-review` add `P<n>` decisions. |
 | `breakdown.md` | `feature-breakdown`, which also writes the Feature's `questions.md` and `decisions.md` |
@@ -630,7 +640,7 @@ The memory path encodes lowercase org, project and repo independently, with safe
 | `route` | `small` or `full`, for a Task. |
 | `size` | For a PBI or User Story: `one` once its size check found it fits one PR, or you chose to keep it whole; `phase` when it's one of a Feature's PBIs. Empty until checked. |
 | `ado` | `parentId`, `hldId` (the design task: an HLD task, or a Feature's Breakdown task), `hldOwned`, `reviewId`, `implIds`, `prId`, and for a Feature `pbis`: each of its PBIs as `{id, waitsFor}`. |
-| `repo` | The repo's `name`, `org` and `project`, and `clonePath`, the workspace holding it (all set by `item-repo`); `worktreePath` (the active code checkout); and `branch` (`user/<userName>/<id>-<slug>`, set by `item-new`; none for a Feature). Optional checkoutMode defaults to worktree; source mode includes sourceFallback reason, remote base/ref, previous branch/HEAD and detached worktree path. |
+| `repo` | The repo's `name`, `org` and `project`, and `clonePath`, the workspace holding it (all set by `item-repo`); `worktreePath` (the active code checkout); and `branch` (`user/<userName>/<id>-<slug>`, set by `item-new`; none for a Feature). Optional checkoutMode is `worktree` or `source` (codeRoot is the configured checkout); `checkoutRecord` holds the reason, time and HEAD when `checkout-record` adopted a README-made or existing checkout; source fallback adds sourceFallback reason, remote base/ref, previous branch/HEAD and detached worktree path. `branch` may be any branch under `user/<userName>/` once recorded. |
 | `hld` | `version`, signal cutoffs (`roundPostedAt`, `approvalRequestedAt`, `closedAt`), `approvedBy`, `approvedAt`, observed `designDriver`, and optional `pendingFeedback` with target, provenance, recording, consumption and delegation timestamps. |
 | `blocker` | The open blocker's `workItemId`, `commentAt` and `reason`. |
 | `stats` | `stageEnteredAt` for each stage, `questionRounds` and `prRounds`. |

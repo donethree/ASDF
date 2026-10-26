@@ -9,8 +9,8 @@ import { artifactPath } from '../scripts/lib/artifacts.ts';
 import { newItem, setItem, setItemStage } from '../scripts/lib/items.ts';
 import { lockItem, unlockItem } from '../scripts/lib/lock.ts';
 import { bindLiveSchedule, enterLiveCheck, finishLiveCheck, prepareLiveWait, stopLiveWatch, suspendLiveWatch } from '../scripts/lib/liveContinuation.ts';
-import { readLiveWatch, writeLiveWatch } from '../scripts/lib/liveWatch.ts';
-import { loadSetup, prepareSetupSave } from '../scripts/lib/setupState.ts';
+import { readLiveWatch } from '../scripts/lib/liveWatch.ts';
+import { loadSetup, prepareSetupSave, saveSetup } from '../scripts/lib/setupState.ts';
 import { settingsPath } from '../scripts/lib/settings.ts';
 import { newContext, REPO, runCli } from './helpers.ts';
 
@@ -91,14 +91,17 @@ describe('interactive check lifecycle', () => {
     assert.equal(results.filter(r => r.acquired).length, 1);
     assert.equal(results.filter(r => !r.acquired).length, 1);
   });
-  it('blocks setup during live priority but not for expired metadata alone', () => {
+  it('allows setup updates without changing a live reservation or its exclusion rules', () => {
     const watch = arm(start);
     const settingsFile = settingsPath();
     const loaded = loadSetup({ settingsFile, mcpFile: join(dirname(settingsFile), 'mcp.json'), copilotSettingsFile: join(dirname(settingsFile), 'copilot.json') });
-    assert.throws(() => prepareSetupSave(loaded), { code: 'ASDF_SETUP_IN_USE' });
-    writeLiveWatch(42, { ...readLiveWatch(42)!, expiresAt: new Date(Date.now() - 1).toISOString() });
-    assert.doesNotThrow(() => prepareSetupSave(loaded));
+    const before = readFileSync(artifactPath(42, 'live-watch.json'), 'utf8');
+    loaded.draft.config.userName = 'updated';
+    saveSetup(prepareSetupSave(loaded));
+    assert.equal(readFileSync(artifactPath(42, 'live-watch.json'), 'utf8'), before);
     assert.equal(readLiveWatch(42)?.watchId, watch.watchId);
+    assert.equal(lockItem(42, 'background').acquired, false);
+    assert.equal(enterLiveCheck(42, watch, 'poll').acquired, true);
   });
   it('allows repeating the same successful bind without a second host schedule', () => {
     const watch = prepareLiveWait(42, 'initial', randomUUID(), 42);

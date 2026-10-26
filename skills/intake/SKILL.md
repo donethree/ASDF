@@ -50,7 +50,7 @@ workflow or a new owner borrowed from chat history.
 
 A Feature goes straight to asdf:feature-breakdown; never ask whether it should be a Feature.
 
-- If its state category isn't `InProgress` or `Resolved`, ask whether to move it to In Progress, as for a PBI below.
+- If its state category isn't `InProgress` or `Resolved`, move it to the first `InProgress` state through `asdf:ado-work-items` without asking, and say so. `do-next` only keeps working on In Progress items.
 - Then run `asdf.ts stage -Id <id> -Stage new` and `asdf:feature-breakdown` in this session. The breakdown works out whether it needs more than one PBI.
 
 ## A PBI or User Story

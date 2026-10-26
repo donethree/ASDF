@@ -10,7 +10,7 @@ import { getSessionStatus, refreshSessionStatus } from './sessionStatus.ts';
 import { readWorkerClaim, withItemGuard } from './workerLease.ts';
 import { findRepoSkills } from './repoSkills.ts';
 import { ledgerAdd, reviewPackage, runBaseline, taskBrief, taskDone, taskStart } from './sdd.ts';
-import { sourceFallback } from './sourceBranch.ts';
+import { recordCheckout, sourceFallback } from './sourceBranch.ts';
 import { getConfig, getSettings, memoryPath, setConfig, setSettings, settingsPath, withSettingsGuard } from './settings.ts';
 import { invokeSignals } from './signals.ts';
 import { AsdfError, fail, type Json } from './util.ts';
@@ -111,8 +111,10 @@ export const COMMANDS: Record<string, Command> = {
   'worktree-path': { required: ['Id', 'Owner'], numbers: ['Id'], run: (p) => reserveWorktreePath(p.Id, p.Owner) },
   'source-fallback': { required: ['Id', 'Owner', 'BaseRef', 'Reason'], numbers: ['Id'],
     run: (p) => sourceFallback(p.Id, p.Owner, p.BaseRef, p.Reason) },
+  'checkout-record': { required: ['Id', 'Owner', 'Path', 'Reason'], numbers: ['Id'],
+    run: (p) => recordCheckout(p.Id, p.Owner, p.Path, p.Reason) },
   'baseline': { required: ['Id', 'Owner', 'BuildCommand'], optional: ['TestCommand'], numbers: ['Id'],
-    run: (p) => runBaseline(p.Id, p.Owner, p.BuildCommand, p.TestCommand), exitCode: (result) => result.exitCode },
+    run: (p) => runBaseline(p.Id, p.Owner, p.BuildCommand, p.TestCommand) },
   'execution-context': { required: ['Id', 'Owner'], numbers: ['Id'], run: (p) => executionContext(p.Id, p.Owner) },
   'code-path': { required: ['Id', 'Owner', 'Path'], numbers: ['Id'], run: (p) => codePath(p.Id, p.Owner, p.Path) },
   'stage': {
@@ -154,9 +156,9 @@ export const COMMANDS: Record<string, Command> = {
     run: (p) => taskStart(p.Id, p.PlanPath, p.TaskNumber, p.RepoPath, p.Owner),
   },
   'task-done': {
-    required: ['Id', 'TaskNumber', 'Base', 'RepoPath', 'TestCommand', 'Owner'], numbers: ['Id', 'TaskNumber'],
-    run: (p) => taskDone(p.Id, p.TaskNumber, p.Base, p.RepoPath, p.TestCommand, p.Owner),
-    exitCode: (result) => result.exitCode,
+    required: ['Id', 'TaskNumber', 'Base', 'RepoPath', 'TestCommand', 'Owner'], optional: ['KnownFailure'], numbers: ['Id', 'TaskNumber'],
+    run: (p) => taskDone(p.Id, p.TaskNumber, p.Base, p.RepoPath, p.TestCommand, p.Owner, p.KnownFailure),
+    exitCode: (result) => (result.recorded ? 0 : result.exitCode),
   },
 };
 

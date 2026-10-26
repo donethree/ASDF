@@ -76,7 +76,7 @@
   ],
   "using-git-worktrees": [
     "Worktrees may live outside asdf-context, but never inside another checkout or item artifact folder.",
-    "The branch is repo.branch, set when the item was created; never name a branch yourself.",
+    "Branches must be under user/<userName>/, the only branches the guard lets ASDF push.",
     "Never search the disk for code, and never clone a repo."
   ],
   "subagent-driven-development": [

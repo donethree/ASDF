@@ -1,11 +1,14 @@
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { hostname } from 'node:os';
 import { dirname, join } from 'node:path';
 import { beforeEach, describe, it } from 'node:test';
-import { newItem, setItemRepo } from '../scripts/lib/items.ts';
+import { itemPath, newItem, setItemRepo } from '../scripts/lib/items.ts';
 import { lockItem } from '../scripts/lib/lock.ts';
 import { addMcpEntry, findMcpMatches, loadSetup, loadSetupMcp, prepareSetupSave, saveSetup, selectContext, setupStore, type LoadedSetup } from '../scripts/lib/setupState.ts';
-import { getConfig } from '../scripts/lib/settings.ts';
+import { contextPath, getConfig } from '../scripts/lib/settings.ts';
+import { writeWorkerClaim } from '../scripts/lib/workerLease.ts';
 import { newContext, newFolder, newWorkspace } from './helpers.ts';
 
 describe('offline setup persistence', () => {
@@ -87,14 +90,38 @@ describe('offline setup persistence', () => {
     assert.equal(readFileSync(join(loaded.draft.contextPath, 'asdf.config.json'), 'utf8'), before);
   });
 
-  it('refuses active work and disruptive changes with unfinished dependencies', () => {
+  it('saves branch username changes without altering an active operation or its item', () => {
     newItem({ id: 42, org: 'contoso', project: 'Storage', kind: 'parent', type: 'User Story', title: 'Work' });
-    loaded.draft.config.userName = 'other';
-    assert.throws(() => prepareSetupSave(loaded), { code: 'ASDF_SETUP_IN_USE' });
-    loaded.draft.config.userName = loaded.originalConfig!.userName;
+    setItemRepo(42, 'Storage');
     lockItem(42, 'active');
-    assert.throws(() => prepareSetupSave(loaded), { code: 'ASDF_SETUP_IN_USE' });
+    const folder = itemPath(42)!;
+    const lock = readFileSync(join(folder, '.lock'), 'utf8');
+    const state = readFileSync(join(folder, 'state.json'), 'utf8');
+    loaded.draft.config.userName = 'other';
+    saveSetup(prepareSetupSave(loaded));
+    assert.equal(getConfig().userName, 'other');
+    assert.equal(readFileSync(join(folder, '.lock'), 'utf8'), lock);
+    assert.equal(readFileSync(join(folder, 'state.json'), 'utf8'), state);
+    assert.equal(lockItem(42, 'competing').acquired, false);
   });
+
+  for (const phase of ['reserved', 'running', 'stopping', 'recovery-needed'] as const) {
+    it(`saves configuration without recovering or clearing a ${phase} worker`, () => {
+      newItem({ id: 42, org: 'contoso', project: 'Storage', kind: 'parent', type: 'User Story', title: 'Work' });
+      const owner = randomUUID();
+      lockItem(42, owner);
+      writeWorkerClaim(42, { schemaVersion: 1, itemId: 42, runId: owner, owner, sessionId: randomUUID(),
+        host: hostname(), runnerPid: process.pid, childPid: null, phase, heartbeatAt: new Date().toISOString() });
+      const folder = itemPath(42)!;
+      const files = [join(folder, '.lock'), join(folder, 'session', 'active-run.json'), join(folder, 'state.json')];
+      const before = files.map(f => readFileSync(f, 'utf8'));
+      loaded.draft.config.maxQuestionsPerRound = 2;
+      saveSetup(prepareSetupSave(loaded));
+      assert.equal(getConfig().maxQuestionsPerRound, 2);
+      assert.deepEqual(files.map(f => readFileSync(f, 'utf8')), before);
+      assert.equal(lockItem(42, 'competing').acquired, false);
+    });
+  }
 
   it('does not treat corrupt existing settings as a new empty setup', () => {
     const settingsFile = join(newFolder(), 'settings.json');
@@ -129,24 +156,56 @@ describe('offline setup persistence', () => {
     assert.equal(existsSync(loaded.paths.mcpFile), false);
   });
 
-  it('refuses context switching and removal of an unfinished item checkout', () => {
+  it('switches context with active work while leaving old context and item files in place', () => {
     newItem({ id: 42, org: 'contoso', project: 'Storage', kind: 'parent', type: 'User Story', title: 'Work' });
     setItemRepo(42, 'Storage');
-    assert.throws(() => prepareSetupSave(selectContext(loaded, join(newFolder(), 'new-context'))), { code: 'ASDF_SETUP_IN_USE' });
-    const other = newWorkspace(join(newFolder(), 'Other'), 'https://dev.azure.com/contoso/Storage/_git/Other');
-    const workspace = loaded.draft.config.workspaces[0];
-    loaded.draft.config.workspaces = [{ ...workspace, path: other, name: 'Other', repo: 'Other' }];
-    assert.throws(() => prepareSetupSave(loaded), { code: 'ASDF_SETUP_IN_USE' });
+    lockItem(42, 'active');
+    const folder = itemPath(42)!;
+    const files = [join(folder, '.lock'), join(folder, 'state.json'), join(loaded.draft.contextPath, 'asdf.config.json')];
+    const before = files.map(f => readFileSync(f, 'utf8'));
+    const target = join(newFolder(), 'new-context');
+    saveSetup(prepareSetupSave(selectContext(loaded, target)));
+    assert.equal(contextPath(), target);
+    assert.deepEqual(files.map(f => readFileSync(f, 'utf8')), before);
+    assert.equal(existsSync(join(target, 'asdf.config.json')), true);
+    assert.equal(existsSync(join(target, '42-work')), false);
   });
 
-  it('retains an unwatched connection needed by an explicitly tracked item', () => {
+  it('removes an in-use organization and checkout without retaining or rewriting them', () => {
+    newItem({ id: 42, org: 'contoso', project: 'Storage', kind: 'parent', type: 'User Story', title: 'Work' });
+    setItemRepo(42, 'Storage');
+    lockItem(42, 'active');
+    const folder = itemPath(42)!;
+    const before = readFileSync(join(folder, 'state.json'), 'utf8');
+    const other = newWorkspace(join(newFolder(), 'Other'), 'https://dev.azure.com/fabrikam/Commerce/_git/Other');
+    const workspace = loaded.draft.config.workspaces[0];
+    loaded.draft.config.orgs = [{ org: 'fabrikam', projects: [{ project: 'Commerce', watchScopes: [{ kind: 'project', areaPaths: [] }] }] }];
+    loaded.draft.config.workspaces = [{ ...workspace, path: other, name: 'Other', org: 'fabrikam', project: 'Commerce', repo: 'Other' }];
+    saveSetup(prepareSetupSave(loaded));
+    assert.deepEqual(getConfig().orgs.map((o: { org: string }) => o.org), ['fabrikam']);
+    assert.deepEqual(getConfig().workspaces.map((w: { path: string }) => w.path), [other]);
+    assert.equal(readFileSync(join(folder, 'state.json'), 'utf8'), before);
+  });
+
+  it('removes a tracked project instead of silently restoring its connection', () => {
     loaded.draft.config.orgs[0].projects.push({ project: 'Other', watchScopes: [{ kind: 'team', team: 'Team' }] });
     saveSetup(prepareSetupSave(loaded));
     loaded = loadSetup(loaded.paths);
     newItem({ id: 42, org: 'contoso', project: 'Other', kind: 'parent', type: 'User Story', title: 'Work' });
     loaded.draft.config.orgs[0].projects = loaded.draft.config.orgs[0].projects.filter(p => p.project !== 'Other');
-    const plan = prepareSetupSave(loaded);
-    assert.deepEqual(plan.draft.config.orgs[0].projects.find(p => p.project === 'Other'), { project: 'Other', watchScopes: [] });
+    saveSetup(prepareSetupSave(loaded));
+    assert.equal(getConfig().orgs[0].projects.some((p: { project: string }) => p.project === 'Other'), false);
+  });
+
+  it('does not inspect or repair item artifacts when saving setup', () => {
+    const folder = join(loaded.draft.contextPath, '42-interrupted');
+    mkdirSync(folder);
+    const file = join(folder, 'state.json');
+    writeFileSync(file, '{partial item write');
+    loaded.draft.config.maxQuestionsPerRound = 2;
+    saveSetup(prepareSetupSave(loaded));
+    assert.equal(getConfig().maxQuestionsPerRound, 2);
+    assert.equal(readFileSync(file, 'utf8'), '{partial item write');
   });
 
   it('preserves an external edit encountered during rollback', () => {

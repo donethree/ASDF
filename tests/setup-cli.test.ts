@@ -3,7 +3,9 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
-import { newFolder, newWorkspace, REPO } from './helpers.ts';
+import { itemPath, newItem, setItemRepo } from '../scripts/lib/items.ts';
+import { lockItem } from '../scripts/lib/lock.ts';
+import { newContext, newFolder, newWorkspace, REPO } from './helpers.ts';
 
 describe('public ASDF launcher', () => {
   const run = (...args: string[]) => {
@@ -43,5 +45,24 @@ describe('public ASDF launcher', () => {
     assert.equal(JSON.parse(readFileSync(settings, 'utf8')).contextPath, context);
     assert.equal(JSON.parse(readFileSync(join(context, 'asdf.config.json'), 'utf8')).userName, 'jdoe');
     assert.equal(existsSync(join(home, '.copilot', 'mcp-config.json')), false);
+  });
+
+  it('updates existing configuration through --init while an item operation is held', () => {
+    const ctx = newContext();
+    const home = newFolder('cli-home');
+    newItem({ id: 42, org: 'contoso', project: 'Storage', kind: 'parent', type: 'User Story', title: 'Work' });
+    setItemRepo(42, 'Storage');
+    lockItem(42, 'active');
+    const lockFile = join(itemPath(42)!, '.lock');
+    const before = readFileSync(lockFile, 'utf8');
+    const answers = ['', process.platform === 'win32' ? 'C:\\w' : '/tmp/w', '4', '4', '4', '4', '4', 'updated', '1'];
+    const result = spawnSync(process.execPath, [join(REPO, 'asdf.js'), '--init'], {
+      env: { ...process.env, HOME: home, USERPROFILE: home, ASDF_SETTINGS: ctx.settings },
+      input: answers.join('\n') + '\n', encoding: 'utf8',
+    });
+    assert.equal(result.status, 0, result.stderr + result.stdout);
+    assert.equal(JSON.parse(readFileSync(join(ctx.context, 'asdf.config.json'), 'utf8')).userName, 'updated');
+    assert.equal(readFileSync(lockFile, 'utf8'), before);
+    assert.equal(lockItem(42, 'competing').acquired, false);
   });
 });

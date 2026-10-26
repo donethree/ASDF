@@ -15,7 +15,7 @@ its provenance without fabricating a PR thread or approval vote.
 
 **Before feedback work:** reuse the item operation owner and get the PR's current status. A completed PR goes to `merged` and ownership-checked close-out, even after reassignment. Otherwise verify the governing item is still yours before further work; an abandoned PR posts a blocker and goes to `blocked`. Terminal PRs receive no pushes or thread/status edits. Repeat this status check immediately before each push or PR mutation. If completion raced with a local fix, preserve that unmerged work and report it rather than claiming it shipped.
 
-For active-PR code work, refresh the execution context and follow `asdf:using-asdf`'s Code execution context contract. Validate edit paths, load applicable target-repo instructions, bind each build/Git command to codeRoot, and refresh before commits or pushes. A missing/mismatched checkout blocks rather than choosing another location; source mode must already be explicitly recorded.
+For active-PR code work, refresh the execution context and follow `asdf:using-asdf`'s Code execution context contract. Validate edit paths, load applicable target-repo instructions, bind each build/Git command to codeRoot, and refresh before commits or pushes. A missing/mismatched checkout blocks rather than choosing another location; the checkout must already be recorded.
 
 1. **Auto-complete first.** If the item came from `merging`, auto-complete is already set. Cancel it before anything else: `repo_pull_request_write update`, with `autoComplete=false`.
 2. **Each active thread whose last comment is human.** Evaluate it with the rigor below, then do exactly one of these:

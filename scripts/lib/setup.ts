@@ -56,7 +56,7 @@ export async function runSetup(io: SetupIO, paths?: SetupPaths): Promise<SetupRe
         if (changed && existsSync(join(path, 'asdf.config.json'))) {
           if (!await yes('This folder already has an ASDF config. Load it for editing?')) continue;
         }
-        if (loaded.originalContext && !sameSetupPath(path, loaded.originalContext)) io.write('Existing item history is not moved. Unfinished work prevents switching contexts.\n');
+        if (loaded.originalContext && !sameSetupPath(path, loaded.originalContext)) io.write('Existing item history and operation locks stay in the previous context; setup does not move them.\n');
         loaded = selectContext(loaded, path);
         return;
       } catch (error) {

@@ -32,12 +32,11 @@ Subagent (general-purpose):
     The host's cwd and project instructions do not switch just because this
     prompt names another repository. Write reports only under artifactRoot.
     Refresh before committing. Do not switch branches or widen permissions.
-    The controller must have completed repository preflight for this operation.
-    Read codeRoot's README, applicable setup/build/test skills and baseline.json
-    in artifactRoot before editing. Implementation code-path checks require a
-    passing baseline for this owner, branch and codeRoot. Missing/failed evidence
-    means BLOCKED, not permission to skip the build. A recorded checkoutMode of
-    source is the only permitted source-checkout fallback; never choose it yourself.
+    The controller has completed repository setup for this checkout. Read
+    codeRoot's README, applicable setup/build/test skills, baseline.json and,
+    when the baseline was red, known-failures.md in artifactRoot before editing.
+    Failures listed there are pre-existing; any other failure is yours to fix.
+    Use the recorded checkout only; never choose another one yourself.
 
     ## Before You Begin
 

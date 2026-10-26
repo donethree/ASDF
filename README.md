@@ -51,14 +51,18 @@ flowchart LR
 - **The approval gate.** Nothing gets built until the HLD is approved. To approve, comment `approved` on the HLD task, or mark the task Done.
 - **Hands-off after approval.**
   - ASDF writes the plan and creates the **implementation tasks** under the PBI.
-  - Before implementation starts or resumes, it reads the repo's README and
-    worktree/bootstrap, build and test skills, initializes the checkout with the
-    repo's tools, and verifies a real baseline build and tests. A failed or
-    unverified baseline stops implementation.
-  - Worktrees are preferred. If worktree creation or initialization fails,
-    ASDF can use the configured source checkout on the item's feature branch
-    from freshly fetched `origin/main` or `origin/master`. The source must be
-    clean and unreserved; existing changes and commits are never reset.
+  - Before implementation starts, it reads the repo's README and worktree/
+    bootstrap, build and test skills and follows them to make the checkout and
+    feature branch. An existing branch for the item, even with commits, is
+    adopted rather than recreated. It then records a real baseline build and
+    tests once per checkout and reuses it on resume. A red baseline (say the
+    default branch itself doesn't build) is recorded as known failures; only
+    new failures block.
+  - Without README guidance, ASDF makes a short linked worktree from the
+    default branch. If that can't be initialized, it uses the configured
+    checkout on the item branch from a fetched base the README names
+    (`origin/main` or, say, a last-known-good build branch). Uncommitted
+    changes are never switched away, reset or stashed.
   - It implements each task with a fresh subagent and reviews it.
   - It runs a self-review: its own reviewer, plus every review skill your repo provides.
   - Then it opens the PR.
@@ -81,9 +85,9 @@ flowchart LR
 - **Node.js 22.18 or later**, installed before you install the plugin, with `node` on your PATH. Check with `node --version`. ASDF's hooks and CLI are TypeScript that Node runs directly, so there's nothing to build and no packages to install.
 - git on your PATH.
 - Local checkouts of the repos ASDF works on (workspaces), such as `C:\src\Payments`.
-  ASDF normally creates an isolated worktree. Its validated initialization
-  fallback temporarily uses a clean source checkout on an item feature branch,
-  preserves the previous branch/commit, and restores it after merge. It never
+  ASDF follows each repo's README for feature branches and checkouts, and
+  otherwise creates a short linked worktree. It can also work directly in the
+  configured checkout, on a branch under `user/<userName>/`. It never
   searches the disk for repos or clones one.
 - **ADO access through MCP when work needs it.** ASDF discovers available tools
   in the running host, including existing local ADO servers and shared services
@@ -180,9 +184,13 @@ subscribe its project, and a backlog does not implicitly choose a code repo.
 An org's `mcpServer` is optional. Existing values remain preference hints;
 a missing or stale hint does not block runtime discovery of another usable server.
 
-Re-run the same command to edit setup. Saving refuses active/unresolved item
-operations and changes that would strand unfinished context, checkout or branch
-dependencies. It does not move history, change Git remotes or broaden branch
+Re-run the same command to edit setup. All valid configuration updates are
+allowed, including context, checkout, organization and branch-user changes,
+while items are active, waiting or unresolved. Setup does not inspect item
+state, restore removed connections, stop workers, release locks or move history.
+Existing item records and worktrees keep their recorded values; subsequent
+operations use the updated configuration and retain their normal ownership,
+repository and branch checks. Setup does not change Git remotes or grant
 permissions. Concurrent edits to configuration files involved in the save and
 partial write failures are reported. General Copilot preferences are read only
 for advisory plugin warnings and do not invalidate your setup draft.
@@ -402,7 +410,7 @@ logging package, configuration step, background timer or external service is use
 
 The coordinator may start in one folder and work on items in different configured repositories. Each code worker receives a verified `execution-context.json`: repository identity, original checkout (read-only), item worktree, branch, artifact folder, owner, CLI entry and target-repo instruction files.
 
-Workers use explicit worktree working directories and absolute file paths, load root and applicable nested/scoped repository instructions, and validate edit targets with `code-path`. Build/review CLI helpers reject another repo or branch before running. Original checkouts and other items are not fallback edit locations; only Git's fetch/worktree metadata operations touch the original checkout.
+Workers use explicit checkout working directories and absolute file paths, load root and applicable nested/scoped repository instructions, and validate edit targets with `code-path`. Build/review CLI helpers reject another repo or branch before running. Code is edited only in the item's recorded checkout; two unfinished items never share one.
 
 This is execution routing and validation, not a shell sandbox. Copilot must still have the appropriate narrowly scoped directory/tool permissions. Missing permissions block work rather than expanding access automatically.
 
@@ -445,14 +453,12 @@ To check that it works, ask Copilot to run `echo ASDF-GUARD-SELFTEST`. It should
 
 Nothing goes into your repos except the code changes on ASDF's branches.
 
-`worktreeRoot` is selected during manual init and used only for new worktrees.
-Existing recorded worktrees can be anywhere outside protected checkouts/item
-artifacts and are not relocated automatically. They must still be registered
-with the correct Git repository and use the recorded branch. Location selection
+`worktreeRoot` is selected during manual init and used only for new default
+worktrees. A checkout made by the repo's own procedure, or an existing branch,
+is recorded where it is with `checkout-record`; it only has to hold the item's
+repository on a branch under `user/<userName>/`. Location selection
 does not grant directory access. Re-run init on an older setup before creating
-new worktrees. To shorten an already-created legacy build root, explicitly move
-that linked worktree with Git and update its recorded path while holding its
-item lock; ASDF will not move or delete your work merely because the root changed.
+new worktrees. ASDF will not move or delete your work merely because the root changed.
 
 Use `asdf.ts memory-path -Org <org> -Project <project> -Repo <repo>` for the encoded memory path. Legacy name-only indexes are left in place; an entry is reused only after its linked item's full repository identity is verified. Equal repository names in different projects are supported; use `item-repo -Org ... -Project ... -Name ...` to select one. Equal work-item ids across organizations still report an explicit collision.
 

@@ -1,4 +1,4 @@
 { "name": "asdf-dev", "owner": { "name": "ASDF" },
   "metadata": { "description": "Local marketplace for the ASDF plugin" },
-  "plugins": [ { "name": "asdf", "source": "./", "version": "0.1.0", "license": "MIT",
+  "plugins": [ { "name": "asdf", "source": "./", "version": "0.2.0", "license": "MIT",
                  "description": "Automated Software Development Workflow for GitHub Copilot and Azure DevOps" } ] }

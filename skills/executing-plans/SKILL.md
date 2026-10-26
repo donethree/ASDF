@@ -54,12 +54,12 @@ preflight, ownership, approval or dependency blockers.
   - stop working on that item.
 - **Dependencies.** A dependency the approved HLD didn't list is a blocker, never a ruling.
 - **Workspace and ledger.** The item's `sdd\` folder, through `asdf.ts task-start`, `asdf.ts task-done`, `asdf.ts review-package` and `asdf.ts ledger-add`. It's the same ledger `asdf:subagent-driven-development` uses, so either can resume the other's work.
-- **The code checkout** is the execution packet's `codeRoot`: the worktree or the validated source-branch fallback from `asdf:using-git-worktrees`.
-- **Preflight is a gate.** On every entry and resume, run `asdf:using-git-worktrees` through repository README/worktree/build/test skill discovery, initialization and the recorded baseline. Continue only on exit 0 and `recorded: true` before task-start or code edits. Old ledger evidence is not a current build; worktree initialization failure uses only that skill's validated source fallback.
+- **The code checkout** is the execution packet's `codeRoot`: whatever `asdf:using-git-worktrees` set up and recorded, following the repo's README.
+- **Preflight is a gate.** On every entry and resume, run `asdf:using-git-worktrees`: reuse the recorded checkout and baseline when they're unchanged, otherwise set them up. A recorded baseline (`recorded: true`) is required before task-start or code edits; a red one is known failures, not a blocker.
 - **Execution context.** Refresh `asdf.ts execution-context -Id <id> -Owner <operation owner>` at entry, resume and before commits. Follow `asdf:using-asdf`'s Code execution context contract: load the target-repo instructions, use `code-path` before edits, absolute file paths and an explicit codeRoot cwd for each command. Inline execution has no exemption from these boundaries.
 - **ADO tasks.** Move each implementation task to `InProgress` when it starts, and to `Completed` when its task is done.
 - **Heartbeat.** Reuse the live or unattended operation owner from `asdf:using-asdf`; acquire one on direct entry. Run `asdf.ts heartbeat -Id <id> -Owner <operation owner>` between tasks. If heartbeat fails with ASDF_LOCK_NOT_OWNER, stop at once and write nothing more. Another pass has taken the item over: no commits, comments, stage changes or unlock.
-- **Task completion.** `task-done` must exit 0 and report `recorded: true`. A nonzero exit or `recorded: false` leaves the task incomplete; read its test log and fix or block, never advance on a success-shaped tool response.
+- **Task completion.** `task-done` must exit 0 and report `recorded: true`. A nonzero exit or `recorded: false` leaves the task incomplete; read its test log and fix or block, never advance on a success-shaped tool response. Pass `-KnownFailure "<which known failures>"` only when every failure in the log is listed in `known-failures.md`.
 - **Rulings** also become `P<n>` rows in `decisions.md`.
 - **The final review is the Review task.** When every task is done, run `asdf.ts stage -Id <id> -Stage self-review`, then `asdf:requesting-code-review`. Without subagents, that skill runs its reviews itself and says so in the Review task.
 
@@ -128,9 +128,9 @@ digraph process {
 
 ## Setup
 
-Ensure the work happens in an isolated workspace: use
-asdf:using-git-worktrees to create one or verify the existing one.
-Complete its discovery and baseline before the next task, also on resume.
+Ensure the work happens in the item's recorded checkout: use
+asdf:using-git-worktrees to set it up or verify the existing one, reusing its
+recorded baseline when unchanged.
 Never start implementation on a main/master branch without your human
 partner's explicit consent.
 
@@ -231,10 +231,12 @@ is fine; BASE is what the review range is cut from, never `HEAD~1`.
 Before a task's ledger line, all of the following are true, with evidence
 in this session — not inferred from the diff looking right:
 
-- Every test the brief names exists and ran in this task, and you read
+- Every test the brief names exists and ran in this task (or could not run
+  only because of a failure listed in `known-failures.md`), and you read
   the output.
-- The final test run for the task passed — `task-done` is that run, and
-  it writes the command and result into the ledger line.
+- The final test run for the task passed, or failed only on failures listed
+  in `known-failures.md` — `task-done` is that run, and it writes the command
+  and result into the ledger line.
 - Every `Expected:` line in the brief was compared against real output.
 - Every deviation from the brief has a `Ruling:` line in the ledger.
 
@@ -245,12 +247,14 @@ the claim. If any item is missing, the task is not complete: finish it.
 
 Run `asdf.ts task-done -Id <id> -Owner <operation owner> -TaskNumber N -Base BASE -RepoPath "<codeRoot>" -TestCommand "<test command>"`
 with the test command the brief names for the whole task. It runs the
-tests, keeps the full output in the workspace, prints the tail, and — only
-if they pass — appends the completion line to the ledger:
+tests, keeps the full output in the workspace, prints the tail, and appends
+the completion line to the ledger when they pass, or when you add
+`-KnownFailure "<which known failures>"` and every failure in the log is
+listed in `known-failures.md`:
 
 `Task <N>: complete (commits <base7>..<head7>, tests: <command> → <result>)`
 
-A failing run records nothing; the task is not complete. When it records,
+Any other failing run records nothing; the task is not complete. When it records,
 mark the todo complete and take the next task.
 
 ## Final Review (ASDF: the Review task)

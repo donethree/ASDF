@@ -4,12 +4,10 @@ import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { getItem, getItems } from './items.ts';
 import { isLocked } from './lock.ts';
-import { branchPrefix, getConfig } from './settings.ts';
-import { fail, git, readJson, same, toList } from './util.ts';
+import { fail, git, readJson, same } from './util.ts';
 import { resolveWorkspace } from './workspaces.ts';
 import { artifactPath, inside, physical, stat } from './artifacts.ts';
 export { artifactPath } from './artifacts.ts';
-import { validateWorktreeLocation } from './worktreePaths.ts';
 
 export interface InstructionFiles {
   root: string[];
@@ -110,17 +108,34 @@ export function workspaceContext(id: number, owner: string) {
     fail('ASDF_EXECUTION_CONTEXT', `item ${id} needs a recorded repository and branch`);
   }
   if (!isAbsolute(repo.clonePath)) fail('ASDF_EXECUTION_CONTEXT', 'execution roots must be absolute');
-  const configured = toList(getConfig()?.workspaces).find((w) =>
-    same(w.org, repo.org) && same(w.project, repo.project) && same(w.repo, repo.name)
-    && samePath(w.path, repo.clonePath));
-  if (!configured) fail('ASDF_EXECUTION_CONTEXT', `item ${id}'s workspace is not configured`);
   const workspaceReadRoot = physical(repo.clonePath, 'ASDF_EXECUTION_CONTEXT');
-  const actual = resolveWorkspace(workspaceReadRoot);
-  if (!same(actual.org, repo.org) || !same(actual.project, repo.project) || !same(actual.repo, repo.name)
-    || !samePath(physical(actual.path, 'ASDF_EXECUTION_CONTEXT'), workspaceReadRoot)) {
-    fail('ASDF_EXECUTION_CONTEXT', `repository identity changed at ${workspaceReadRoot}`);
-  }
+  sameRepository(repo, workspaceReadRoot);
   return { state, repo, artifactRoot, workspaceReadRoot };
+}
+
+// The checkout must hold the item's repository: its origin names the recorded org, project and repo.
+function sameRepository(repo: { org: string; project: string; name: string }, root: string): void {
+  let actual;
+  try { actual = resolveWorkspace(root); }
+  catch (error) { fail('ASDF_EXECUTION_CONTEXT', (error as Error).message); }
+  if (!same(actual.org, repo.org) || !same(actual.project, repo.project) || !same(actual.repo, repo.name)
+    || !samePath(physical(actual.path, 'ASDF_EXECUTION_CONTEXT'), root)) {
+    fail('ASDF_EXECUTION_CONTEXT', `repository identity changed at ${root}`);
+  }
+}
+
+function checkoutKey(path: string): string {
+  const full = resolve(path);
+  try { return stat(full) ? physical(full, 'ASDF_EXECUTION_CONTEXT') : full; }
+  catch { return full; }
+}
+
+// Another unfinished item already working in this checkout, if any. Two items in one checkout would mix their commits.
+export function checkoutUser(id: number, codeRoot: string): number | null {
+  const key = checkoutKey(codeRoot);
+  const other = getItems().find((item) => item.id !== id && item.stage !== 'done'
+    && typeof item.repo?.worktreePath === 'string' && item.repo.worktreePath && samePath(checkoutKey(item.repo.worktreePath), key));
+  return other ? other.id : null;
 }
 
 export function executionContext(id: number, owner: string, requestedRepoPath?: string): ExecutionContext {
@@ -128,45 +143,16 @@ export function executionContext(id: number, owner: string, requestedRepoPath?: 
   if (typeof repo.worktreePath !== 'string' || !isAbsolute(repo.worktreePath)) {
     fail('ASDF_EXECUTION_CONTEXT', `item ${id} needs an absolute recorded code checkout`);
   }
-  if (repo.checkoutMode !== undefined && repo.checkoutMode !== null && !['worktree', 'source'].includes(repo.checkoutMode)) {
-    fail('ASDF_EXECUTION_CONTEXT', 'unknown checkout mode');
-  }
-  const checkoutMode = repo.checkoutMode === 'source' ? 'source' : 'worktree';
-  const codeRoot = checkoutMode === 'source'
-    ? physical(repo.worktreePath, 'ASDF_EXECUTION_CONTEXT') : validateWorktreeLocation(id, repo.worktreePath);
-  if (checkoutMode === 'source') {
-    const fallback = repo.sourceFallback;
-    const prefix = branchPrefix();
-    if (!samePath(codeRoot, workspaceReadRoot) || typeof fallback?.reason !== 'string' || !fallback.reason.trim()
-      || !prefix || !repo.branch.startsWith(`${prefix}/${id}-`)
-      || !/^origin\/(?:main|master)$/.test(fallback.baseRef) || !/^[0-9a-f]{40,64}$/.test(fallback.baseCommit)) {
-      fail('ASDF_EXECUTION_CONTEXT', 'source checkout needs a recorded main/master fallback');
-    }
-    if (getItems().some((item) => item.id !== id && item.stage !== 'done' && item.repo?.checkoutMode === 'source'
-      && typeof item.repo.clonePath === 'string' && samePath(physical(item.repo.clonePath, 'ASDF_EXECUTION_CONTEXT'), codeRoot))) {
-      fail('ASDF_EXECUTION_CONTEXT', 'source checkout is reserved by another item');
-    }
-    if (git(codeRoot, ['merge-base', '--is-ancestor', fallback.baseCommit, 'HEAD']).code !== 0) {
-      fail('ASDF_EXECUTION_CONTEXT', 'source branch no longer descends from its recorded remote base');
-    }
-  }
+  const codeRoot = physical(repo.worktreePath, 'ASDF_EXECUTION_CONTEXT');
+  if (!stat(codeRoot)) fail('ASDF_EXECUTION_CONTEXT', `item ${id}'s recorded checkout ${repo.worktreePath} does not exist`);
+  const checkoutMode = samePath(codeRoot, workspaceReadRoot) ? 'source' : 'worktree';
   if (requestedRepoPath !== undefined && (!isAbsolute(requestedRepoPath)
     || !samePath(physical(requestedRepoPath, 'ASDF_EXECUTION_CONTEXT'), codeRoot))) {
-    fail('ASDF_EXECUTION_CONTEXT', `use item ${id}'s worktree, not ${requestedRepoPath}`);
+    fail('ASDF_EXECUTION_CONTEXT', `use item ${id}'s checkout, not ${requestedRepoPath}`);
   }
-  for (const root of [workspaceReadRoot, codeRoot]) {
-    const actual = resolveWorkspace(root);
-    if (!same(actual.org, repo.org) || !same(actual.project, repo.project) || !same(actual.repo, repo.name)
-      || !samePath(physical(actual.path, 'ASDF_EXECUTION_CONTEXT'), root)) {
-      fail('ASDF_EXECUTION_CONTEXT', `repository identity changed at ${root}`);
-    }
-  }
-  const common = (root: string) => physical(resolve(root, gitOutput(root, ['rev-parse', '--git-common-dir'])), 'ASDF_EXECUTION_CONTEXT');
-  if (!samePath(common(workspaceReadRoot), common(codeRoot))) fail('ASDF_EXECUTION_CONTEXT', 'worktree belongs to a different Git repository');
-  const registered = gitOutput(workspaceReadRoot, ['worktree', 'list', '--porcelain', '-z']).split('\0')
-    .filter((field) => field.startsWith('worktree ')).map((field) => field.slice(9))
-    .some((path) => samePath(path, repo.worktreePath) || (stat(path) && samePath(physical(path, 'ASDF_EXECUTION_CONTEXT'), codeRoot)));
-  if (!registered) fail('ASDF_EXECUTION_CONTEXT', 'the item worktree is not registered');
+  sameRepository(repo, codeRoot);
+  const other = checkoutUser(id, codeRoot);
+  if (other !== null) fail('ASDF_EXECUTION_CONTEXT', `unfinished item ${other} also uses ${repo.worktreePath}`);
   const branch = gitOutput(codeRoot, ['symbolic-ref', '--quiet', '--short', 'HEAD']);
   if (branch !== repo.branch) fail('ASDF_EXECUTION_CONTEXT', `expected branch ${repo.branch}, found ${branch}`);
   return {
@@ -179,18 +165,21 @@ export function executionContext(id: number, owner: string, requestedRepoPath?: 
   };
 }
 
-export function requireBaseline(context: ExecutionContext): void {
+// A recorded baseline run (passing or with known failures) for this checkout and branch, at an ancestor of HEAD.
+export function requireBaseline(context: ExecutionContext): { passed: boolean } & Record<string, unknown> {
   const file = artifactPath(context.itemId, 'baseline.json');
   if (!stat(file)) fail('ASDF_BASELINE_REQUIRED', 'run baseline in the verified codeRoot before implementation');
   let baseline;
   try { baseline = readJson(file); }
   catch (error) { fail('ASDF_BASELINE_REQUIRED', `cannot read baseline evidence: ${(error as Error).message}`); }
-  if (baseline?.passed !== true || baseline.owner !== context.owner || baseline.branch !== context.branch
-    || baseline.codeRoot !== context.codeRoot || typeof baseline.buildCommand !== 'string' || !baseline.buildCommand.trim()
+  if (!Number.isInteger(baseline?.exitCode) || typeof baseline.passed !== 'boolean'
+    || baseline.branch !== context.branch || baseline.codeRoot !== context.codeRoot
+    || typeof baseline.buildCommand !== 'string' || !baseline.buildCommand.trim()
     || typeof baseline.head !== 'string' || !/^[0-9a-f]{40,64}$/.test(baseline.head)
     || git(context.codeRoot, ['merge-base', '--is-ancestor', baseline.head, context.head]).code !== 0) {
-    fail('ASDF_BASELINE_REQUIRED', 'this operation needs a passing baseline build in its current codeRoot and branch');
+    fail('ASDF_BASELINE_REQUIRED', 'record a completed baseline run for the current checkout and branch');
   }
+  return baseline;
 }
 
 export function codePath(id: number, owner: string, path: string): { path: string; instructions: InstructionFiles } {

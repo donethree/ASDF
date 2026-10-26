@@ -43,10 +43,11 @@ or code writes. Reuse the existing item worktree and refresh execution-context
 before code work; this session's artifact cwd is never the code root.
 Completed ledger tasks stay completed even if old chat says otherwise.
 Before continuing stage `implementing`, require the executor's
-`asdf:using-git-worktrees` preflight: repository guidance discovery, initialization
-and a fresh recorded baseline. For a resumed small Task, run it here before
-continuing TDD; full-plan executors run it at their entry. Do not edit or dispatch
-on an old baseline. Preserve the verified worktree/source checkout mode.
+`asdf:using-git-worktrees` preflight: the recorded checkout verified, or set up
+per the repo's README, and a recorded baseline for that checkout and branch
+(reused when unchanged; red means known failures). For a resumed small Task,
+run it here before continuing TDD; full-plan executors run it at their entry.
+Preserve the recorded checkout and branch.
 
 Check the required ASDF skills are enabled and resolve to this plugin before
 loading them. Discover ADO tools in this worker process using
