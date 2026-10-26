@@ -25,12 +25,15 @@ function decodeEntities(text: string): string {
   });
 }
 
-// ADO comment HTML as one line of text. @mentions are dropped, so "@Ana approved" reads as "approved".
+// ADO comment text, from HTML or Markdown, as one line. @mentions and Markdown emphasis are dropped,
+// so "@Ana approved" and "@<id> **approved**" both read as "approved".
 export function plainText(html: unknown): string {
   if (!html) return '';
   let text = String(html).replace(/<a\b[^>]*data-vss-mention[^>]*>.*?<\/a>/gis, ' ');
+  text = text.replace(/@<[^<>\s]+>/g, ' ');
   text = text.replace(/<[^>]+>/g, ' ');
-  return decodeEntities(text).replace(/[\s\u00A0]+/g, ' ').trim();
+  text = decodeEntities(text).replace(/\\([!-/:-@[-`{-~])/g, '$1').replace(/[*_~`]+/g, '');
+  return text.replace(/[\s\u00A0]+/g, ' ').trim();
 }
 
 export function isMarkedComment(text: unknown): boolean {

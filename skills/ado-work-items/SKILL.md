@@ -139,16 +139,16 @@ Never hard-code state names. Processes differ (Active, Committed, In Progress, D
 - **Titles:** `HLD: <parent title>`, `Review: <parent title>`, `Impl <n>: <step>`.
 - **Tags** (`System.Tags`, `;`-separated): `asdf; asdf-hld`, `asdf; asdf-review`, `asdf; asdf-impl`.
 - **Assigned to:** the governing ASDF work item's assignee (the Task's assignee on the standalone Task path). **Area and iteration:** the parent's.
-- **Create with** `wit_work_item_write add_child` under the ADO parent. Then store the ids: write `{"ado":{"hldId":<id>,"hldOwned":true,"reviewId":<id>}}` to `<item>\patch.json` and run `asdf.ts item-set -Id <item id> -File <item>\patch.json`. The ASDF item id is the Task id on the standalone Task path, not its untracked parent. Implementation task ids go in `ado.implIds` the same way. Reuse already recorded HLD/Review tasks on retries.
+- **Create with** `wit_work_item_write add_child` under the ADO parent, with any description in Markdown (see "Descriptions"). Then store the ids: write `{"ado":{"hldId":<id>,"hldOwned":true,"reviewId":<id>}}` to `<item>\patch.json` and run `asdf.ts item-set -Id <item id> -File <item>\patch.json`. The ASDF item id is the Task id on the standalone Task path, not its untracked parent. Implementation task ids go in `ado.implIds` the same way. Reuse already recorded HLD/Review tasks on retries.
 - **An existing HLD on a parent:** a child Task tagged `asdf-hld`, or one whose title starts with `HLD` or `Design` (case-insensitive). Its owner is that Task's assignee. `asdf:brainstorming` decides whether to drive it or wait for it.
 - **A Feature** gets only a Breakdown task, created when ASDF picks the Feature up: title `Breakdown: <feature title>`, tags `asdf; asdf-breakdown`, assigned and placed like the tasks above. Store it as the Feature's design task: `{"ado":{"hldId":<id>,"hldOwned":true}}`. A Feature never gets an HLD task, a Review task or implementation tasks.
 - **An existing Breakdown task on a Feature:** a child Task tagged `asdf-breakdown`, or one whose title starts with `Breakdown` (case-insensitive). `asdf:feature-breakdown` decides whether to drive it or wait for it.
 
 ## Features and their PBIs
 
-- **Creating a Feature.** Create a Feature only with the person's OK. That's a yes in a session, or their answer to the size question. Use `wit_work_item_write create` with the first type in `workItemTypes.feature`, copying the PBI's title, description, area path, iteration and assignee. Link the PBI under it with `wit_work_item_link_write link`, the Feature being the parent, then move the Feature to the first state in the `InProgress` category. If no tool can link existing work items, ask the person to put the PBI under the Feature, and stop.
-- **Creating a Feature's PBI.** Use `wit_work_item_write add_child` under the Feature. The type is the first type in `workItemTypes.parent` that the project has (check with `get_type`). Copy the area path and iteration from the Feature, assign it to the Feature's assignee, and set the description from the `pbi-description` template. A PBI that waits for another is created in the first `Proposed` state. A Feature's PBIs never carry the asdf tag. They're ordinary PBIs, and the assigned-items query leaves out anything tagged `asdf`.
-- **Reusing a PBI.** For an existing child PBI that the breakdown reuses, set its title from the breakdown and append the `pbi-scope` template below its description, keeping the text that's there. Only for a PBI assigned to you that hasn't started.
+- **Creating a Feature.** Create a Feature only with the person's OK. That's a yes in a session, or their answer to the size question. Use `wit_work_item_write create` with the first type in `workItemTypes.feature`, copying the PBI's title, description (in its existing format), area path, iteration and assignee. Link the PBI under it with `wit_work_item_link_write link`, the Feature being the parent, then move the Feature to the first state in the `InProgress` category. If no tool can link existing work items, ask the person to put the PBI under the Feature, and stop.
+- **Creating a Feature's PBI.** Use `wit_work_item_write add_child` under the Feature. The type is the first type in `workItemTypes.parent` that the project has (check with `get_type`). Copy the area path and iteration from the Feature, assign it to the Feature's assignee, and set the description from the `pbi-description` template in Markdown. A PBI that waits for another is created in the first `Proposed` state. A Feature's PBIs never carry the asdf tag. They're ordinary PBIs, and the assigned-items query leaves out anything tagged `asdf`.
+- **Reusing a PBI.** For an existing child PBI that the breakdown reuses, set its title from the breakdown and append the `pbi-scope` template below its description, keeping the text that's there and its format. Only for a PBI assigned to you that hasn't started.
 - **Reading a Feature's PBIs.** Run this with the org's WIQL tool, then `get_batch` for their states, mapped to categories through `get_type`:
 
   ```
@@ -166,9 +166,22 @@ Never hard-code state names. Processes differ (Active, Committed, In Progress, D
 - ASDF comments only for question rounds, approval requests, blockers, task-size and parent requests, Feature splits, HLD updates and proposals, session summaries, and the final and Feature summaries. Never progress updates.
 - After a blocker comment, run stage blocked with -Reason, so that a reply unblocks the item. The full command is `asdf.ts stage -Id <id> -Stage blocked -Reason "<reason>"`. Add `-WorkItemId <id>` when the comment went on a different work item than the item's own.
 - @-mention the assignee (or the HLD owner) in question rounds, approval requests, blockers, parent requests and HLD updates, so ADO sends an email.
-  - A real mention is `<a href="#" data-vss-mention="version:2.0,<identity id>">@<Display Name></a>`. Take the identity id from the work item's `System.AssignedTo` (its `id`), or from `core_get_identity_ids` where the server has it.
-  - If you can't resolve it, write `@<Display Name>` as plain text.
-- Comments are HTML. Use `<p>`, `<br>` and `<ul>`. The `[ASDF]` marker must be the first visible text.
+  - In Markdown a mention is `@<identity id>`. Take the identity id from the work item's `System.AssignedTo` (its `id`), or from `core_get_identity_ids` where the server has it.
+  - If you can't resolve it, write `@Display Name` as plain text.
+- **Comments are Markdown.** Select the comment tool's Markdown format explicitly (for example `format: "Markdown"`); don't rely on the server's default. Write Markdown only: servers escape raw HTML in a Markdown comment, so `<p>`, `<br>` or `<a>` would show up as text.
+  - `[ASDF]` is the first text of the comment, written literally: not bold, escaped, or inside a heading or table.
+  - Put a blank line before and after every list and table. Keep each table row on one line, with no line break inside a cell, and escape `|` in cell text as `\|`.
+  - **If the discovered comment tool has no format option** (older servers post HTML), write the same template as HTML instead: `<p>`, `<ul><li>`, and `<table>` with `<th>`/`<td>` for tables. Mentions are then `<a href="#" data-vss-mention="version:2.0,<identity id>">@<Display Name></a>`, and `[ASDF]` is still the first visible text.
+
+## Descriptions
+
+ADO stores each large text field (Description, Repro Steps, Acceptance Criteria) as HTML or Markdown, per work item. Switching a field to Markdown is permanent for that work item.
+
+- **Descriptions ASDF writes in full use Markdown:** `hld-description` on the HLD task it drives, `breakdown-description` on the Breakdown task it drives, `pbi-description` on the PBIs it creates, and the HLD, Review, Breakdown and implementation tasks it creates. Set the format in the same write:
+  - create and `add_child`: the field's or item's `format: "Markdown"`;
+  - a JSON Patch update: add `{"op":"add","path":"/multilineFieldsFormat/System.Description","value":"Markdown"}` next to the `/fields/System.Description` operation.
+- **Never convert a description someone else wrote.** When ASDF adds to a description it doesn't write in full (`pbi-scope` on a reused PBI, a copied description, or a Feature that is its own design item), read the work item's `multilineFieldsFormat`: no entry for the field means HTML. Write the addition in that format (`<p>`, `<ul><li>`, `<table>` for HTML), and leave out the `multilineFieldsFormat` operation.
+- If a server's write tool has no format option and no JSON Patch update, write HTML as above, rendering tables as `<table>`.
 
 ## The HLD on the HLD task
 
@@ -178,7 +191,7 @@ Upload a new HLD version only when you request approval (`asdf:brainstorming` de
 
 1. Copy `hld.md` to `hld.v<N>.md` in the item folder, where N is `hld.version`.
 2. Upload it with `wit_work_item_attachment_upload`, then link it to the HLD task with `wit_work_item_attachment_link`.
-3. Set the HLD task's `System.Description` from the `hld-description` template: one line pointing at the latest attachment, then the key-decisions table, one line per decision with how it was made.
+3. Set the HLD task's `System.Description` from the `hld-description` template, in Markdown (see "Descriptions"): one line pointing at the latest attachment, then the key-decisions table, one row per decision with how it was made.
 
 A Feature's breakdown goes to its Breakdown task the same way: `breakdown.md` is copied to `breakdown.v<N>.md`, and the description comes from the `breakdown-description` template.
 

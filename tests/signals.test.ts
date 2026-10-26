@@ -40,11 +40,22 @@ describe('comment text', () => {
     assert.equal(isMarkedComment('thanks [ASDF]'), false);
   });
 
-  for (const text of ['approved', 'Approved, ship it', '<div>APPROVED.</div>', '<div><a data-vss-mention="x">@Bo</a> approved</div>']) {
+  it('recognizes the marker in Markdown source, including an escaped one', () => {
+    assert.equal(isMarkedComment('[ASDF] Round 1 for HLD v1\n\n| Q | Question |\n|---|---|'), true);
+    assert.equal(isMarkedComment('\\[ASDF\\] Blocked: missing package'), true);
+  });
+
+  it('drops Markdown mentions and formatting', () => {
+    assert.equal(plainText('@<6f1c2a3b-0d4e-4f5a-9b8c-7d6e5f4a3b2c> **Approved**!'), 'Approved!');
+  });
+
+  for (const text of ['approved', 'Approved, ship it', '<div>APPROVED.</div>', '<div><a data-vss-mention="x">@Bo</a> approved</div>',
+    '@<6f1c2a3b-0d4e-4f5a-9b8c-7d6e5f4a3b2c> approved', '@<ana@contoso.com> Approved!', '**approved**', '_Approved, ship it._', '`approved`']) {
     it(`accepts the approval '${text}'`, () => assert.equal(isApprovalText(text), true));
   }
 
-  for (const text of ['not approved', 'will be approved after Q2', '[ASDF] Reply approved to approve', 'approve?']) {
+  for (const text of ['not approved', 'will be approved after Q2', '[ASDF] Reply approved to approve', 'approve?',
+    '**approved** once the tests pass', '@<6f1c2a3b-0d4e-4f5a-9b8c-7d6e5f4a3b2c> not approved', '\\[ASDF\\] approved']) {
     it(`rejects the non-approval '${text}'`, () => assert.equal(isApprovalText(text), false));
   }
 });

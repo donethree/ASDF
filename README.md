@@ -44,9 +44,10 @@ flowchart LR
 
     Every claim cites a file and line.
   - It drafts the HLD from the work item, the deep dive, and the decisions recorded for earlier items in the same repo. The HLD lists what it reuses, what must keep working and the edge cases. Breaking something that works today is always your call, never ASDF's.
-  - Questions it can't settle go out in **rounds**. Each round is one ADO comment of multiple-choice questions, with ASDF's recommendation listed first.
+  - Questions it can't settle go out in **rounds**. Each round is one ADO comment with a table of multiple-choice questions, ASDF's recommendation listed first.
   - Before asking for approval, a fresh reviewer checks the HLD against the code: anything it reinvents, breaks, misses or gets wrong.
   - The full design, mermaid diagrams included, is attached to the HLD task as markdown.
+  - ASDF's comments, and the descriptions it writes in full, are Markdown, with tables for questions, decisions and summaries. A description someone else wrote keeps its format; ASDF never converts it.
   - If the PBI already has an HLD task (tagged `asdf-hld`, or titled `HLD...` or `Design...`), ASDF uses it rather than creating a second one. It drives that design only if the task is assigned to you and this item owns the design. Replies on a shared HLD never authorize ASDF to rewrite it.
 - **The approval gate.** Nothing gets built until the HLD is approved. To approve, comment `approved` on the HLD task, or mark the task Done.
 - **Hands-off after approval.**

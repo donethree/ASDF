@@ -350,7 +350,7 @@ stateDiagram-v2
    - from `pr-open`, approved and green with no active thread goes to `pr-ready`.
 10. `blocked` with a human comment on the blocker's work item, newer than `blocker.commentAt`, goes back to `resumeStage`.
 
-A *human comment* is one whose plain text doesn't start with `[ASDF]`. Plain text means HTML stripped, `@mention` anchors removed and entities decoded. `invokeSignals` applies the result. With `-Owner`, it first verifies/heartbeats that owner's lock; without it, it skips locked items for compatibility. For a Feature at `awaiting-pbis`, it also returns `ready` from `readyPbis`: the PBIs still Proposed whose every prerequisite is Completed.
+A *human comment* is one whose plain text doesn't start with `[ASDF]`. Plain text means HTML stripped, `@mention` anchors and Markdown `@<id>` mentions removed, entities decoded, and Markdown escapes and emphasis (`*`, `_`, `~`, backticks) dropped. `invokeSignals` applies the result. With `-Owner`, it first verifies/heartbeats that owner's lock; without it, it skips locked items for compatibility. For a Feature at `awaiting-pbis`, it also returns `ready` from `readyPbis`: the PBIs still Proposed whose every prerequisite is Completed.
 
 Flags that `do-next` writes by hand (`assignedToMe`, `lastCommentIsAsdf`, `mergeConflicts`, `approved`) are read leniently: booleans, `1` and `0`, and the text `true` and `false` in any case.
 
@@ -390,8 +390,8 @@ Live sessions use the same item-operation lock protocol as hourly passes, retain
 - **A Feature,** with the person's OK, when a large PBI becomes one. The PBI goes under it.
 - **Tags and assignee.** ASDF's tasks are tagged `asdf`, plus `asdf-hld`, `asdf-review`, `asdf-impl` or `asdf-breakdown`, and assigned to the parent's assignee.
 - **An existing HLD task** on the parent is adopted instead of creating a second one, and so is an existing Breakdown task on a Feature. `ado.hldOwned` records whether this item created, or drives, its design task. ASDF only closes or reopens design tasks it owns.
-- **Comments.** Every comment comes from a template in [`templates.md`](skills/ado-work-items/templates.md) and starts with `[ASDF]`.
-- **The HLD on the task.** The HLD is uploaded as `hld.v<N>.md`, and the HLD task's description holds the decisions table.
+- **Comments.** Every comment comes from a template in [`templates.md`](skills/ado-work-items/templates.md) and starts with `[ASDF]`. Comments are posted as Markdown, with the format selected explicitly; HTML is used only when a server's comment tool has no format option.
+- **The HLD on the task.** The HLD is uploaded as `hld.v<N>.md`, and the HLD task's description holds the decisions table. Descriptions ASDF writes in full are saved as Markdown (`/multilineFieldsFormat`, permanent per field); descriptions others wrote keep their format.
 - **The PR** is created from the item's branch, `user/<userName>/<id>-<slug>`, with a description from [`pr-description-template.md`](skills/finishing-a-development-branch/pr-description-template.md). ASDF merges it by setting auto-complete once its own checks pass. It never votes, never bypasses a policy, and never merges locally.
 
 ## Hooks
@@ -549,7 +549,7 @@ node "<plugin root>/scripts/asdf.ts" <command> -Name value ...
 | [`lock.ts`](scripts/lib/lock.ts) | Per-item locks: atomic creation, owner checks, heartbeats and taking over a stale lock. |
 | [`execution.ts`](scripts/lib/execution.ts) | Validated per-item execution context, instruction inventory, code-path containment and artifact-path containment. Uses native canonical paths for Windows short-name/junction identity. |
 | [`queue.ts`](scripts/lib/queue.ts) | The work queue: unlocked items in stages with a priority, ordered by priority, then time in the stage. |
-| [`signals.ts`](scripts/lib/signals.ts) | Reading comments (HTML to text, the `[ASDF]` marker, "approved"), deciding whether the governing item is active, the transition rules, and which of a Feature's PBIs are ready to start. |
+| [`signals.ts`](scripts/lib/signals.ts) | Reading comments (HTML or Markdown to text, the `[ASDF]` marker, "approved"), deciding whether the governing item is active, the transition rules, and which of a Feature's PBIs are ready to start. |
 | [`repoSkills.ts`](scripts/lib/repoSkills.ts) | Finds a repo's review, build and test skills (under `.github/skills`, `.agents/skills` and `.claude/skills`) and agents (under `.github/agents`). |
 | [`sdd.ts`](scripts/lib/sdd.ts) | The SDD folder (`<item>\sdd\`): task briefs, review packages, test runs and the ledger. Ports of Superpowers' workspace scripts. |
 | [`guard.ts`](scripts/lib/guard.ts) | The guard rules. Pure, and it imports only `util.ts`, because the guard hook runs before every shell call. |
