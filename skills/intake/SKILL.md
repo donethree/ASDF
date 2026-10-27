@@ -41,7 +41,8 @@ For direct manually initiated work, preserve `origin: live`, a generated
 threadId and the root item ID through subsequent skills. This is distinct
 from do-next (even manually invoked inline do-next), persistent workers and
 subagents. At a design/PR wait, use `asdf:live-continuation` to register a
-five-minute same-conversation check when supported; never leave the session
+same-conversation check starting at five minutes, increasing by five up to
+sixty, when supported; never leave the session
 dependent on a separate hourly pass without reporting host limitations.
 Direct rejoining of a watched item goes through live-continuation, not a new
 workflow or a new owner borrowed from chat history.

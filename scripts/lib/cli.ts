@@ -52,10 +52,11 @@ export const COMMANDS: Record<string, Command> = {
     run: (p) => bindLiveSchedule(p.Id, p.Owner, { watchId: p.WatchId, generation: p.Generation }, p.ScheduleId) },
   'live-enter': { required: ['Id', 'Owner', 'WatchId', 'Generation'], numbers: ['Id', 'Generation'],
     run: (p) => enterLiveCheck(p.Id, { watchId: p.WatchId, generation: p.Generation }, p.Owner) },
-  'live-finish': { required: ['Id', 'Owner', 'WatchId', 'Generation', 'ReadsSucceeded'], numbers: ['Id', 'Generation'],
+  'live-finish': { required: ['Id', 'Owner', 'WatchId', 'Generation', 'ReadsSucceeded'], optional: ['ScheduleMissing'], numbers: ['Id', 'Generation'],
     run: (p) => {
       if (!['true', 'false'].includes(p.ReadsSucceeded)) fail('ASDF_BAD_ARGUMENT', 'ReadsSucceeded must be true or false');
-      return finishLiveCheck(p.Id, { watchId: p.WatchId, generation: p.Generation }, p.Owner, p.ReadsSucceeded === 'true');
+      if (p.ScheduleMissing !== undefined && !['true', 'false'].includes(p.ScheduleMissing)) fail('ASDF_BAD_ARGUMENT', 'ScheduleMissing must be true or false');
+      return finishLiveCheck(p.Id, { watchId: p.WatchId, generation: p.Generation }, p.Owner, p.ReadsSucceeded === 'true', undefined, p.ScheduleMissing === 'true');
     } },
   'live-suspend': { required: ['Id', 'Owner', 'WatchId', 'Generation'], numbers: ['Id', 'Generation'],
     run: (p) => suspendLiveWatch(p.Id, { watchId: p.WatchId, generation: p.Generation }, p.Owner) },

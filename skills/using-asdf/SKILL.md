@@ -20,8 +20,9 @@ This exception changes orchestration, not the ADO, approval or code-root rules.
 
 **Live continuation:** direct manually started item work preserves origin live,
 threadId and rootItemId through skill handoffs. At design/PR waits use
-`asdf:live-continuation` for five-minute same-session checks, chat approval/
-feedback and safe resumption. A scheduled prompt for an existing live watch
+`asdf:live-continuation` for same-session checks starting at five minutes,
+increasing by five up to sixty, chat approval/feedback and safe resumption.
+A scheduled prompt for an existing live watch
 keeps that live origin. do-next, persistent workers and subagents never arm
 these watches. A missing host scheduler is reported, not silently substituted.
 
@@ -101,8 +102,9 @@ An unexpired interactive watch also reserves its item. Ordinary lock acquisition
 defers to it; the matching live controller uses live-enter with a fresh owner,
 not a borrowed token/owner from old chat. While live-protected, include Owner
 on item-set, item-repo, stage, ledger-add and task-brief. Wait reservations expire
-after 15 minutes without successful required reads; existing active operation
-locks and persistent claims retain their own rules.
+after the next polling delay plus ten minutes of grace without successful
+required reads (initially 15 minutes); existing active operation locks and
+persistent claims retain their own rules.
 
 1. Generate an operation owner with `node -e "console.log(crypto.randomUUID())"` and run `asdf.ts lock -Id <id> -Owner <operation owner>`. If `acquired` is false, leave the item untouched and report it deferred.
 2. Pass the same owner through skill handoffs. Nested skills reuse the held lock; they never generate another owner. At entry, before mutations, between long steps, and immediately after a user answer, run `asdf.ts heartbeat -Id <id> -Owner <operation owner>`.

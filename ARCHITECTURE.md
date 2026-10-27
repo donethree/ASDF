@@ -55,14 +55,15 @@ Five constraints shape the design:
 
 [`live-continuation`](skills/live-continuation/SKILL.md) drives the originating
 manual conversation through design and PR waits using the host's recurring
-prompt capability (five minutes). It does not launch a CLI worker or contain
+prompt capability (five minutes initially, increasing by five to a sixty-minute
+cap while waiting). Actionable activity resets the delay. It does not launch a CLI worker or contain
 its own ADO client. [`work-item`](skills/work-item/SKILL.md) remains the shared
 stage table, with explicit live, unattended inline and persistent origins.
 
 | Module | Role |
 |---|---|
 | [approval.ts](scripts/lib/approval.ts) | Design target identity and pending-feedback guards shared by all modes. |
-| [liveWatch.ts](scripts/lib/liveWatch.ts) | Validated item-local live-watch records and 15-minute reservation eligibility. |
+| [liveWatch.ts](scripts/lib/liveWatch.ts) | Validated item-local live-watch intervals and reservation eligibility through the next delay plus ten minutes. |
 | [liveContinuation.ts](scripts/lib/liveContinuation.ts) | Owner-checked lifecycle, interaction receipts, publication and sequential child selection. |
 
 `live-prepare`, `live-bind`, `live-enter`, `live-finish`, `live-suspend`,
@@ -86,7 +87,12 @@ never by overriding a fresh owner or persistent worker claim. Restoration
 reconciles the exact host prompt before reusing or replacing a timer; terminal
 items cancel their own monitor even when another operation holds item state.
 
-Success renews waiting priority; read failure preserves its previous deadline.
+Success renews waiting priority through the next delay plus ten minutes; read
+failure preserves its previous deadline. `live-finish` returns a new preparing
+generation and retains ownership when the timer needs replacement. The host
+binds its actual replacement schedule before ownership is released. At the cap,
+an existing timer is reused; `-ScheduleMissing true` restores a lost timer
+without resetting or advancing the persisted delay.
 Fresh operation locks protect actual actions; stale generations cannot reenter.
 Worker claims are never overridden. Setup and ordinary acquisition defer
 unexpired live reservations; expired/stopped metadata alone does not create

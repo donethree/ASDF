@@ -257,8 +257,10 @@ Azure DevOps has no level between a PBI and a Task, so large work is a **Feature
 ## Interactive continuation
 
 Manually started item work stays in its conversation. When an HLD or Feature
-breakdown waits for answers/approval, ASDF registers a **five-minute session
-check**, when the host exposes its recurring-prompt tools. You can give feedback
+breakdown waits for answers/approval, ASDF registers a session check when the
+host exposes its recurring-prompt tools. **Checks start at five minutes and
+increase by five each time, up to sixty minutes.** Actionable chat feedback or
+a design/PR transition resets the next wait to five minutes. You can give feedback
 or approve the current design in chat, post `approved` in ADO, or mark the owned
 design task Done. Chat approval continues immediately; ADO changes are picked
 up by the next check without a separate "continue" prompt.
@@ -278,7 +280,8 @@ a daemon or claiming a check is running. There are no new setup settings.
 Unattended do-next (including inline mode), persistent workers and subagents
 do not create these live watches.
 
-A 15-minute reservation is renewed only after a complete successful refresh.
+A reservation covering the next polling delay plus ten minutes of grace
+(initially 15 minutes) is renewed only after a complete successful refresh.
 It keeps the hourly loop from taking the active live item while waiting, but
 expires when checks stop succeeding. Errors do not imply approval or extend
 priority forever. The running session can notice restored access without a

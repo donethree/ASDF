@@ -29,15 +29,44 @@ describe('interactive check lifecycle', () => {
     unlockItem(42, 'initial');
     return watch;
   };
-  it('renews successful unchanged checks without replacing the schedule', () => {
-    const watch = arm(start);
-    const tick = new Date(start.getTime() + 5 * 60000);
-    assert.equal(enterLiveCheck(42, watch, 'poll', tick).acquired, true);
-    const finished = finishLiveCheck(42, watch, 'poll', true, tick);
-    assert.equal(finished.generation, watch.generation);
-    assert.equal(finished.scheduleId, 123);
-    assert.equal(finished.expiresAt, new Date(tick.getTime() + 15 * 60000).toISOString());
-    assert.equal(lockItem(42, 'background', tick).acquired, false);
+  it('increases unchanged waits from five to sixty minutes and reuses the capped timer', () => {
+    let watch = arm(start);
+    let tick = start;
+    let scheduleId = 123;
+    assert.equal(watch.intervalSeconds, 300);
+    for (const intervalSeconds of [600, 900, 1200, 1500, 1800, 2100, 2400, 2700, 3000, 3300, 3600, 3600]) {
+      tick = new Date(tick.getTime() + watch.intervalSeconds * 1000);
+      assert.equal(enterLiveCheck(42, watch, 'poll', tick).acquired, true);
+      const finished = finishLiveCheck(42, watch, 'poll', true, tick);
+      assert.equal(finished.intervalSeconds, intervalSeconds);
+      assert.equal(finished.lastSuccessfulCheckAt, tick.toISOString());
+      assert.equal(finished.expiresAt, new Date(tick.getTime() + (intervalSeconds + 600) * 1000).toISOString());
+      if (intervalSeconds !== watch.intervalSeconds) {
+        assert.equal(finished.status, 'preparing');
+        assert.equal(finished.operationOwner, 'poll');
+        assert.equal(finished.generation, watch.generation + 1);
+        assert.equal(finished.scheduleId, null);
+        assert.throws(() => enterLiveCheck(42, watch, 'queued', tick), { code: 'ASDF_LIVE_STALE' });
+        watch = bindLiveSchedule(42, 'poll', finished, ++scheduleId, tick);
+        unlockItem(42, 'poll');
+      } else {
+        assert.equal(finished.status, 'armed');
+        assert.equal(finished.operationOwner, null);
+        assert.equal(finished.generation, watch.generation);
+        assert.equal(finished.scheduleId, scheduleId);
+        watch = finished;
+      }
+      assert.equal(lockItem(42, 'background', new Date(tick.getTime() + intervalSeconds * 1000)).acquired, false);
+    }
+    assert.equal(enterLiveCheck(42, watch, 'missing-timer', tick).acquired, true);
+    const restored = finishLiveCheck(42, watch, 'missing-timer', true, tick, true);
+    assert.equal(restored.intervalSeconds, 3600);
+    assert.equal(restored.status, 'preparing');
+    assert.equal(restored.scheduleId, null);
+    assert.equal(restored.generation, watch.generation + 1);
+    bindLiveSchedule(42, 'missing-timer', restored, ++scheduleId, tick);
+    unlockItem(42, 'missing-timer');
+    assert.equal(lockItem(42, 'background', new Date(tick.getTime() + 70 * 60000)).acquired, true);
   });
   it('does not renew failed reads and allows fallback after expiry', () => {
     const watch = arm(start);
@@ -45,8 +74,95 @@ describe('interactive check lifecycle', () => {
     enterLiveCheck(42, watch, 'poll', tick);
     const finished = finishLiveCheck(42, watch, 'poll', false, tick);
     assert.equal(finished.expiresAt, watch.expiresAt);
+    assert.equal(finished.lastSuccessfulCheckAt, null);
+    assert.equal(finished.intervalSeconds, 600);
+    bindLiveSchedule(42, 'poll', finished, 124, tick);
+    unlockItem(42, 'poll');
     assert.equal(lockItem(42, 'background', new Date(start.getTime() + 16 * 60000)).acquired, true);
-    assert.equal(enterLiveCheck(42, watch, 'late-poll', new Date(start.getTime() + 17 * 60000)).acquired, false);
+    assert.equal(enterLiveCheck(42, finished, 'late-poll', new Date(start.getTime() + 17 * 60000)).acquired, false);
+  });
+  it('preserves the increased delay when an interrupted timer replacement is restored', () => {
+    const watch = arm(start);
+    const tick = new Date(start.getTime() + 5 * 60000);
+    enterLiveCheck(42, watch, 'poll', tick);
+    const finished = finishLiveCheck(42, watch, 'poll', true, tick);
+    const later = new Date(start.getTime() + 100 * 60000);
+    assert.equal(enterLiveCheck(42, finished, 'restored', later).acquired, true);
+    const restored = prepareLiveWait(42, 'restored', watch.threadId, 42, later);
+    assert.equal(restored.intervalSeconds, 600);
+    assert.equal(restored.lastSuccessfulCheckAt, tick.toISOString());
+    assert.equal(restored.expiresAt, finished.expiresAt);
+    assert.equal(bindLiveSchedule(42, 'restored', restored, 124, later).intervalSeconds, 600);
+  });
+  it('does not advance an unbound delay again during restoration with failed reads', () => {
+    const watch = arm(start);
+    const tick = new Date(start.getTime() + 5 * 60000);
+    enterLiveCheck(42, watch, 'poll', tick);
+    const finished = finishLiveCheck(42, watch, 'poll', true, tick);
+    const later = new Date(start.getTime() + 100 * 60000);
+    enterLiveCheck(42, finished, 'restored', later);
+    const restored = finishLiveCheck(42, finished, 'restored', false, later);
+    assert.equal(restored.intervalSeconds, 600);
+    assert.equal(restored.expiresAt, finished.expiresAt);
+    assert.equal(restored.lastSuccessfulCheckAt, tick.toISOString());
+  });
+  it('starts at five minutes after interrupted actionable work', () => {
+    const watch = arm(start);
+    enterLiveCheck(42, watch, 'poll', start);
+    const finished = finishLiveCheck(42, watch, 'poll', true, start);
+    const bound = bindLiveSchedule(42, 'poll', finished, 124, start);
+    unlockItem(42, 'poll');
+    enterLiveCheck(42, bound, 'activity', start);
+    const working = suspendLiveWatch(42, bound, 'activity');
+    const later = new Date(start.getTime() + 100 * 60000);
+    enterLiveCheck(42, working, 'restored', later);
+    const restored = finishLiveCheck(42, working, 'restored', true, later);
+    assert.equal(restored.intervalSeconds, 300);
+    assert.equal(restored.expiresAt, new Date(later.getTime() + 15 * 60000).toISOString());
+    assert.equal(restored.status, 'preparing');
+  });
+  for (const activity of ['chat feedback', 'design revision', 'new wait', 'new thread'] as const) {
+    it(`resets the delay to five minutes after ${activity}`, () => {
+      const watch = arm(start);
+      enterLiveCheck(42, watch, 'poll');
+      const finished = finishLiveCheck(42, watch, 'poll', true);
+      const bound = bindLiveSchedule(42, 'poll', finished, 124);
+      unlockItem(42, 'poll');
+      enterLiveCheck(42, bound, 'activity');
+      if (activity === 'chat feedback') suspendLiveWatch(42, bound, 'activity');
+      if (activity === 'design revision') setItem(42, { hld: { version: 2 } });
+      if (activity === 'new wait') setItemStage(42, 'awaiting-answers');
+      if (activity === 'new wait') setItem(42, { hld: { roundPostedAt: start.toISOString() } });
+      if (activity === 'new thread') {
+        stopLiveWatch(42, bound, 'activity');
+        lockItem(42, 'activity');
+      }
+      const next = prepareLiveWait(42, 'activity', activity === 'new thread' ? randomUUID() : watch.threadId, 42);
+      assert.equal(next.intervalSeconds, 300);
+      assert.equal(next.lastSuccessfulCheckAt, null);
+      assert.equal(next.status, 'preparing');
+    });
+  }
+  it('exposes the next interval and retained owner through the CLI for timer replacement', () => {
+    const watch = arm(start);
+    enterLiveCheck(42, watch, 'poll');
+    const result = runCli('live-finish', '-Id', '42', '-Owner', 'poll',
+      '-WatchId', watch.watchId, '-Generation', String(watch.generation), '-ReadsSucceeded', 'true');
+    assert.equal(result.code, 0);
+    assert.equal(result.json.status, 'preparing');
+    assert.equal(result.json.intervalSeconds, 600);
+    assert.equal(result.json.operationOwner, 'poll');
+    assert.equal(runCli('live-info', '-Id', '42').json.intervalSeconds, 600);
+    assert.equal(runCli('live-bind', '-Id', '42', '-Owner', 'poll', '-WatchId', result.json.watchId,
+      '-Generation', String(result.json.generation), '-ScheduleId', '124').code, 0);
+    assert.equal(runCli('unlock', '-Id', '42', '-Owner', 'poll').json.removed, true);
+    assert.equal(runCli('live-enter', '-Id', '42', '-Owner', 'restored', '-WatchId', result.json.watchId,
+      '-Generation', String(result.json.generation)).json.acquired, true);
+    const restored = runCli('live-finish', '-Id', '42', '-Owner', 'restored', '-WatchId', result.json.watchId,
+      '-Generation', String(result.json.generation), '-ReadsSucceeded', 'true', '-ScheduleMissing', 'true');
+    assert.equal(restored.code, 0);
+    assert.equal(restored.json.intervalSeconds, 600);
+    assert.equal(restored.json.status, 'preparing');
   });
   it('fences a duplicate tick and invalidates queued prompts before continuing', () => {
     const watch = arm(start);
@@ -116,8 +232,9 @@ describe('interactive check lifecycle', () => {
     const resumed = enterLiveCheck(42, watch, 'resumed', later);
     assert.equal(resumed.acquired, true);
     assert.equal(resumed.watch?.operationOwner, 'resumed');
-    finishLiveCheck(42, watch, 'resumed', false, later);
-    assert.equal(readLiveWatch(42)?.status, 'armed');
+    const finished = finishLiveCheck(42, watch, 'resumed', false, later);
+    assert.equal(finished.status, 'preparing');
+    assert.equal(finished.intervalSeconds, 600);
   });
   it('recovers a preparing watch and replaces an expired missing schedule', () => {
     const watch = prepareLiveWait(42, 'initial', randomUUID(), 42, start);

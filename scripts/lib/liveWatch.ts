@@ -4,7 +4,8 @@ import { getItem } from './items.ts';
 import { fail, isObject, now, same } from './util.ts';
 
 export const LIVE_INTERVAL_SECONDS = 300;
-export const LIVE_RESERVATION_SECONDS = 900;
+export const LIVE_MAX_INTERVAL_SECONDS = 3600;
+export const LIVE_RESERVATION_GRACE_SECONDS = 600;
 export const LIVE_WAIT_STAGES = ['awaiting-answers', 'awaiting-approval', 'pr-open', 'merging'] as const;
 export type LiveKey = { watchId: string; generation: number };
 export type LiveWatch = {
@@ -12,12 +13,13 @@ export type LiveWatch = {
   threadId: string; rootItemId: number; watchId: string; generation: number;
   status: 'preparing' | 'armed' | 'checking' | 'working' | 'stopped';
   waitStage: typeof LIVE_WAIT_STAGES[number]; target: DesignTarget | null; prId: number | null;
-  scheduleId: number | null; operationOwner: string | null;
+  scheduleId: number | null; operationOwner: string | null; intervalSeconds: number;
   lastSuccessfulCheckAt: string | null; expiresAt: string;
 };
 const time = (v: unknown) => typeof v === 'string' && Number.isFinite(Date.parse(v));
 export function parseLiveWatch(value: unknown, item: { id: number; org: string; project: string }): LiveWatch {
   const id = item.id;
+  const intervalSeconds = isObject(value) && value.intervalSeconds !== undefined ? value.intervalSeconds : LIVE_INTERVAL_SECONDS;
   if (!isObject(value) || value.schemaVersion !== 1 || !isObject(value.item) || value.item.id !== id
     || !same(value.item.org, item.org) || !same(value.item.project, item.project)
     || !uuid(value.watchId) || !uuid(value.threadId) || !Number.isSafeInteger(value.generation) || value.generation < 1
@@ -27,6 +29,8 @@ export function parseLiveWatch(value: unknown, item: { id: number; org: string; 
     || !(value.scheduleId === null || (Number.isSafeInteger(value.scheduleId) && value.scheduleId > 0))
     || !(value.prId === null || (Number.isSafeInteger(value.prId) && value.prId > 0))
     || !(value.operationOwner === null || (typeof value.operationOwner === 'string' && value.operationOwner))
+    || !Number.isSafeInteger(intervalSeconds) || intervalSeconds < LIVE_INTERVAL_SECONDS
+    || intervalSeconds > LIVE_MAX_INTERVAL_SECONDS || intervalSeconds % LIVE_INTERVAL_SECONDS !== 0
     || !(value.lastSuccessfulCheckAt === null || time(value.lastSuccessfulCheckAt)) || !time(value.expiresAt)) {
     fail('ASDF_LIVE_INVALID', `invalid live watch for item ${id}`);
   }
@@ -35,7 +39,7 @@ export function parseLiveWatch(value: unknown, item: { id: number; org: string; 
   catch { return fail('ASDF_LIVE_INVALID', `invalid watched design for item ${id}`); }
   return { schemaVersion: 1, item: { id, org: item.org, project: item.project }, threadId: value.threadId, rootItemId: value.rootItemId,
     watchId: value.watchId, generation: value.generation, status: value.status, waitStage: value.waitStage, target,
-    prId: value.prId, scheduleId: value.scheduleId, operationOwner: value.operationOwner,
+    prId: value.prId, scheduleId: value.scheduleId, operationOwner: value.operationOwner, intervalSeconds,
     lastSuccessfulCheckAt: value.lastSuccessfulCheckAt, expiresAt: value.expiresAt };
 }
 export function readLiveWatch(id: number): LiveWatch | null {

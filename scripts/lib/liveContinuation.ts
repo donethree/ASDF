@@ -4,7 +4,8 @@ import { artifactPath, atomicJson, optionalJson, uuid } from './artifacts.ts';
 import { designTarget, pendingDesignRevision, sameDesignTarget, validateDesignTarget, type DesignTarget } from './approval.ts';
 import { getItem, getItems, managedChildReason, setItem, setItemStage } from './items.ts';
 import { assertItemOwner, isLocked, lockItem, unlockItem } from './lock.ts';
-import { LIVE_RESERVATION_SECONDS, LIVE_WAIT_STAGES, assertLiveMutation, isLiveReserved, readLiveWatch, validateLiveKey, writeLiveWatch, type LiveKey, type LiveWatch } from './liveWatch.ts';
+import { LIVE_INTERVAL_SECONDS, LIVE_MAX_INTERVAL_SECONDS, LIVE_RESERVATION_GRACE_SECONDS, LIVE_WAIT_STAGES,
+  assertLiveMutation, isLiveReserved, readLiveWatch, validateLiveKey, writeLiveWatch, type LiveKey, type LiveWatch } from './liveWatch.ts';
 import { getConfig, withSettingsGuard } from './settings.ts';
 import { readWorkerClaim, withItemGuard } from './workerLease.ts';
 import { fail, isObject, now, same, toList } from './util.ts';
@@ -46,15 +47,19 @@ export function prepareLiveWait(id: number, owner: string, threadId: string, roo
       fail('ASDF_LIVE_INVALID', 'a design wait needs its current request or question cutoff');
     }
     if (['pr-open', 'merging'].includes(item.stage) && !item.ado?.prId) fail('ASDF_LIVE_INVALID', 'PR wait needs a recorded PR');
-    if (previous && previous.threadId === threadId && previous.status === 'armed' && isLiveReserved(previous, at) && previous.waitStage === item.stage
+    const continuing = previous && previous.threadId === threadId && previous.rootItemId === rootItemId
+      && !['working', 'stopped'].includes(previous.status) && previous.waitStage === item.stage
       && previous.prId === (item.ado?.prId ?? null)
-      && ((!target && !previous.target) || (target && previous.target && sameDesignTarget(target, previous.target)))) return previous;
+      && ((!target && !previous.target) || (target && previous.target && sameDesignTarget(target, previous.target))) ? previous : null;
+    if (continuing?.status === 'armed' && isLiveReserved(continuing, at)) return continuing;
     const time = now(at);
     const watch: LiveWatch = { schemaVersion: 1, item: { id, org: item.org, project: item.project },
       threadId, rootItemId, watchId: previous?.threadId === threadId ? previous.watchId : randomUUID(),
       generation: (previous?.generation ?? 0) + 1, status: 'preparing', waitStage: item.stage, target,
       prId: item.ado?.prId ?? null, scheduleId: null, operationOwner: owner,
-      lastSuccessfulCheckAt: null, expiresAt: new Date(time.getTime() + LIVE_RESERVATION_SECONDS * 1000).toISOString() };
+      intervalSeconds: continuing?.intervalSeconds ?? LIVE_INTERVAL_SECONDS,
+      lastSuccessfulCheckAt: continuing?.lastSuccessfulCheckAt ?? null,
+      expiresAt: continuing?.expiresAt ?? new Date(time.getTime() + (LIVE_INTERVAL_SECONDS + LIVE_RESERVATION_GRACE_SECONDS) * 1000).toISOString() };
     writeLiveWatch(id, watch);
     annotate(id, owner, watch);
     return watch;
@@ -90,11 +95,13 @@ export function enterLiveCheck(id: number, key: LiveKey, owner: string, at?: Dat
     return { acquired: true, watch, reason: watch.scheduleId === null ? 'host schedule needs reconciliation' : null };
   });
 }
-export function finishLiveCheck(id: number, key: LiveKey, owner: string, readsSucceeded: boolean, at?: Date): LiveWatch {
+export function finishLiveCheck(id: number, key: LiveKey, owner: string, readsSucceeded: boolean, at?: Date, scheduleMissing = false): LiveWatch {
   return guarded(id, () => {
     const watch = owned(id, owner, key, at)!;
     if (watch.status !== 'checking') fail('ASDF_LIVE_STALE', 'no live check is in progress');
     if (typeof readsSucceeded !== 'boolean') fail('ASDF_BAD_ARGUMENT', 'ReadsSucceeded must be true or false');
+    const intervalSeconds = watch.scheduleId === null || scheduleMissing ? watch.intervalSeconds
+      : Math.min(watch.intervalSeconds + LIVE_INTERVAL_SECONDS, LIVE_MAX_INTERVAL_SECONDS);
     if (readsSucceeded) {
       const item = getItem(id);
       const target = designTarget(item);
@@ -103,7 +110,16 @@ export function finishLiveCheck(id: number, key: LiveKey, owner: string, readsSu
         fail('ASDF_LIVE_TARGET_CHANGED', 'state changed; suspend and continue or rearm against the new target');
       }
       watch.lastSuccessfulCheckAt = now(at).toISOString();
-      watch.expiresAt = new Date(now(at).getTime() + LIVE_RESERVATION_SECONDS * 1000).toISOString();
+      watch.expiresAt = new Date(now(at).getTime() + (intervalSeconds + LIVE_RESERVATION_GRACE_SECONDS) * 1000).toISOString();
+    }
+    if (intervalSeconds !== watch.intervalSeconds || watch.scheduleId === null || scheduleMissing) {
+      watch.intervalSeconds = intervalSeconds;
+      watch.generation++;
+      watch.status = 'preparing';
+      watch.scheduleId = null;
+      writeLiveWatch(id, watch);
+      annotate(id, owner, watch);
+      return watch;
     }
     watch.status = 'armed';
     watch.operationOwner = null;
@@ -117,6 +133,8 @@ export function suspendLiveWatch(id: number, key: LiveKey, owner: string): LiveW
     const watch = owned(id, owner, key)!;
     watch.generation++;
     watch.status = 'working';
+    watch.intervalSeconds = LIVE_INTERVAL_SECONDS;
+    watch.lastSuccessfulCheckAt = null;
     writeLiveWatch(id, watch);
     annotate(id, owner, watch);
     return watch;

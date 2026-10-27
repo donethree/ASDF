@@ -36,6 +36,10 @@ live-stop -Id <id> -WatchId <key> -Generation <n> -Owner <owner>
 
 The returned watch supplies the authoritative next key/generation. A live
 controller sets `auditPassId = threadId` for shared router logging.
+`intervalSeconds` is the authoritative delay: start at 300 seconds, add 300
+after each continuing scheduled check, and cap at 3600. Actionable activity
+resets the next wait to 300. Restoring a missing or unbound timer preserves its
+delay instead of advancing it again.
 
 ## Arm an external wait
 
@@ -49,8 +53,9 @@ With the item's operation lock held:
 2. `live-prepare -Id <id> -Owner <owner> -ThreadId <threadId> -RootId <rootId>`.
    Save the returned key and presented target. Reuse an already-armed matching
    schedule only after confirming it still exists in this host conversation.
-3. Create one schedule with `action: "create"`, `interval: "5m"`, and a prompt
-   of this shape (substitute actual returned values):
+3. Create one schedule with `action: "create"` and `interval` equal to the
+   returned `intervalSeconds` in minutes (`300` -> `"5m"`, `600` -> `"10m"`).
+   Use a prompt of this shape (substitute actual returned values):
 
    ```text
    ASDF live check: item <id>, watch <watchId>, generation <generation>.
@@ -62,19 +67,43 @@ With the item's operation lock held:
 
 4. Bind the actual returned numeric ID:
    `live-bind -Id <id> -Owner <owner> -WatchId <key> -Generation <n> -ScheduleId <host id>`.
-   Only after successful bind, announce five-minute checks while this session
-   runs, release the operation lock, and end the turn without a blocking approval
-   form. The user can approve or give feedback in chat or ADO.
+   On initial arm, only after successful bind, announce that checks start at
+   five minutes and increase by five up to sixty while this session runs.
+   Timer replacements remain quiet. Release the operation lock and end the
+   turn without a blocking approval form. The user can approve or give feedback
+   in chat or ADO.
 5. If create/bind fails, stop only the schedule just created, call live-stop
    under still-valid ownership, and report the failure. If the outcome is
    uncertain, list schedules and reconcile the exact unique prompt marker.
    Never invent a schedule ID, assume a persisted file proves a live timer,
    or remove another thread's watch.
 
-One unchanged wait reuses its generation/schedule. Do not create another timer
-on every check. Timers may run late while the host is busy, asleep or stopped.
+Keep one host timer per watch. Replace it only when the returned delay changes
+or the timer is missing; at the sixty-minute cap reuse the existing timer.
+Timers may run late while the host is busy, asleep or stopped.
 Normal interactive question forms may block processing; never promise active
 polling while such a form remains pending.
+
+## Finish a check and rearm
+
+Save the current key/schedule ID before calling live-finish. Add
+`-ScheduleMissing true` only when host reconciliation proves that timer is
+absent. Both successful unchanged checks and failed reads back off; failed reads
+never extend the existing reservation.
+
+- If the returned status is `armed`, the cap is unchanged and the operation
+  lock is already released. Keep its existing timer and remain quiet.
+- If it is `preparing`, live-finish invalidated the old generation and retained
+  the operation lock for replacement. Use the **returned** key/owner. Cancel
+  only the retired timer, confirming its exact prompt if its identity is
+  uncertain; reconcile cancellation before creating another. Then use arm
+  steps 3-5 with the returned interval/key, bind the actual new schedule ID,
+  and release the lock. Do not call live-prepare again or reuse the retired ID.
+
+On cancellation/create/bind failure, report the actual failure, clean up only
+this replacement's timer and call live-stop under still-valid ownership.
+Never claim a timer was stopped or created without host confirmation. On lost
+ownership, stop without further item mutations or unlock.
 
 ## Scheduled check or chat reentry
 
@@ -104,19 +133,21 @@ polling while such a form remains pending.
    For designs read current task state/change timestamp and complete new comments;
    for PRs read review threads, votes, build/check/conflict state and status.
 4. If required reads fail or are incomplete, do not apply signals. Call
-   `live-finish ... -ReadsSucceeded false`; it releases the lock without
-   extending the old reservation. Report the first changed error and normal
-   init/MCP access guidance; suppress repeated identical chatter. Keep the
-   schedule so access recovery is noticed without a manual continue prompt.
-   If restoration found no host schedule, report that monitoring could not be
-   restored; do not claim a timer exists or renew priority after failed reads.
+   `live-finish ... -ReadsSucceeded false` and follow "Finish a check and rearm".
+   It preserves the old reservation deadline, even when replacing the timer.
+   Report the first changed error and normal init/MCP access guidance; suppress
+   repeated identical chatter. Continue backed-off checks so access recovery is
+   noticed without a manual continue prompt. If timer restoration fails, report
+   it; do not claim a timer exists or renew priority after failed reads.
 5. Otherwise apply `signals -Id <id> -Owner <owner> -File "<fresh signals>"`,
    then reread the item. Approval/feedback is decided by shared signal rules.
    On reassignment, pause/block, abandonment or done, call live-stop under this
    ownership, cancel the exact retired schedule, and end monitoring. Do not
    route terminal state through live-finish or leave a recurring no-op check.
-   If still at the same wait/target, `live-finish ... -ReadsSucceeded true`
-   renews priority for 15 minutes and releases the operation; remain quiet.
+   If there is no actionable change and the wait/target is unchanged,
+   `live-finish ... -ReadsSucceeded true`
+   renews priority through the next delay plus ten minutes of grace. Follow
+   "Finish a check and rearm"; remain quiet.
 6. On an actionable change or new chat input, `live-suspend` with the current
    key/owner. Use its **new** generation for subsequent commands, stop its
    retired schedule, and retain the operation lock while continuing. A queued
@@ -225,14 +256,15 @@ On a restored session:
    a fresh lock or persistent claim means defer, never remove it.
 3. Under acquired ownership, reread ADO and item state. Terminal state stops
    monitoring. Failed reads follow the failed-read path without renewing.
-4. If the recorded bound schedule still exists and target/wait are unchanged,
-   finish the successful check and reuse it. Otherwise cancel only matching
-   old schedules, including an orphan created before bind. Reconcile ambiguous
-   cancellation before creating another. Call live-prepare with the same
-   thread/root under the held owner; its new generation replaces the interrupted
-   check. Create one five-minute schedule for that returned key, bind its
-   actual ID, then release ownership. Do not bind the new ID to an old armed
-   generation or treat a saved schedule ID as proof of a running timer.
+4. With the target/wait unchanged, finish the check and follow "Finish a check
+   and rearm". Pass `-ScheduleMissing true` if the host list has no matching
+   bound timer, even at the sixty-minute cap. A missing/unbound timer keeps its
+   persisted interval; it does not restart at five or skip another increment.
+   Cancel only matching old schedules, including an orphan created before bind,
+   and reconcile ambiguous cancellation before creating another. Bind the new
+   ID only to the returned preparing generation. A saved schedule ID never
+   proves a running timer. If the target/wait changed, suspend and continue;
+   the next external wait starts at five minutes.
 
 Use live-info/session-info for current state. Log only meaningful transitions,
 approval/feedback receipt status or changed failures through automation-log with

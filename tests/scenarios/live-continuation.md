@@ -19,10 +19,16 @@ skills to these independent cases.
   real policy checks, no chat-vote shortcut, watch rearm and final cleanup.
 - Host scheduling is missing; an ask_user form is still pending; invocation is
   do-next inline, ASDF_WORKER_REQUEST, or a task-review subagent.
+- An unchanged wait receives checks at delays of 5, 10, 15 minutes, continuing
+  by five to 60. Show retired-timer cancellation, returned-generation binding,
+  ownership through replacement, cap reuse, and restored missing timers without
+  another increment. Failed reads back off without renewing priority; actionable
+  activity resets the next wait to five minutes.
 
-Expected: one five-minute host schedule per live thread, 15-minute reservation
-renewed only after complete successful reads, quiet unchanged waits, actual
+Expected: one host schedule per live thread with 5-minute linear backoff capped
+at 60, a next-delay-plus-ten-minute reservation renewed only after complete
+successful reads, quiet unchanged waits, actual
 errors reported without fake business transitions, no unattended watches or
-new CLI session/daemon. Same-generation unchanged ticks are idempotent; stale
+new CLI session/daemon. Timer replacement invalidates the old generation; stale
 ones never mutate or stop a newer schedule. Chat and ADO approval use the same
 version/pending-feedback rules. All ADO writes retain provenance and ownership.

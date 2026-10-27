@@ -22,7 +22,8 @@ describe('live reservations', () => {
     watch = { schemaVersion: 1, item: { id: 42, org: 'contoso', project: 'Storage' }, threadId: randomUUID(), rootItemId: 42,
       watchId: randomUUID(), generation: 1, status: 'armed', waitStage: 'awaiting-approval',
       target: { designId: 43, version: 1, requestedAt: START.toISOString(), roundPostedAt: null },
-      prId: null, scheduleId: 1, operationOwner: null, lastSuccessfulCheckAt: START.toISOString(), expiresAt: minute(15).toISOString() };
+      prId: null, scheduleId: 1, operationOwner: null, intervalSeconds: 300,
+      lastSuccessfulCheckAt: START.toISOString(), expiresAt: minute(15).toISOString() };
   });
   it('excludes unrelated owners until expiry but permits matching controller ownership', () => {
     writeLiveWatch(42, watch);
@@ -42,6 +43,15 @@ describe('live reservations', () => {
     setItemStage(42, 'new');
     assert.throws(() => readLiveWatch(42), { code: 'ASDF_LIVE_INVALID' });
     assert.equal(getQueueReport(minute(5)).deferred[0].error?.code, 'ASDF_LIVE_INVALID');
+  });
+  it('loads legacy watches at five minutes and rejects malformed persisted delays', () => {
+    const { intervalSeconds: _, ...legacy } = watch;
+    writeFileSync(artifactPath(42, 'live-watch.json'), JSON.stringify(legacy));
+    assert.equal(readLiveWatch(42)?.intervalSeconds, 300);
+    for (const intervalSeconds of [null, 0, 299, 301, 3900, '600']) {
+      writeFileSync(artifactPath(42, 'live-watch.json'), JSON.stringify({ ...watch, intervalSeconds }));
+      assert.throws(() => readLiveWatch(42), { code: 'ASDF_LIVE_INVALID' });
+    }
   });
   it('does not use a stopped or working watch as a permanent idle claim', () => {
     assert.equal(isLiveReserved(watch, minute(14)), true);

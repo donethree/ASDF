@@ -265,7 +265,8 @@ Run the builder check before requesting approval. Run the code check with the bu
    This rechecks the target, atomically enters awaiting-approval and clears
    only recorded, consumed feedback superseded by this version. Never clear
    pendingFeedback by hand.
-5. In live mode return to `asdf:live-continuation` to arm a five-minute check
+5. In live mode return to `asdf:live-continuation` to arm a check starting at
+   five minutes, increasing by five up to sixty while the wait continues,
    and release the operation lock. Unattended entry returns to its caller as
    before, without creating a schedule.
 
