@@ -2,7 +2,7 @@
 
 ## Setup
 
-- `do-next` pass, unattended. Item 12345 "Add CSV export" is in stage `answers-received`.
+- `bg-orch` pass, unattended. Item 12345 "Add CSV export" is in stage `answers-received`.
 - `hld.version` is 0, `hld.roundPostedAt` is 2026-10-20T10:00:00Z, and `maxQuestionsPerRound` is 4.
 - Round 1 in `questions.md` asked:
   - Q1: stream to disk (A, recommended) or build in memory (B)?
@@ -14,7 +14,7 @@
 
 ## Prompt
 
-"Dry run: you're in an unattended do-next pass and this item is in answers-received. Using the brainstorming skill (and ado-work-items for conventions), describe exactly what you'd do, in order: the files you'd write (with their content), the comments you'd post (with their text), and the CLI commands. Don't execute anything."
+"Dry run: you're in an unattended bg-orch pass and this item is in answers-received. Using the brainstorming skill (and ado-work-items for conventions), describe exactly what you'd do, in order: the files you'd write (with their content), the comments you'd post (with their text), and the CLI commands. Don't execute anything."
 
 ## Expected
 

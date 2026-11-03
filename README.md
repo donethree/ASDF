@@ -13,7 +13,8 @@ ASDF is a plugin for **GitHub Copilot** (the Copilot CLI and the GitHub Copilot 
 
 It follows the same cycle as Superpowers (design, plan, test-driven implementation, review, finish). What ASDF adds is the steering between those steps:
 
-- You assign a PBI, User Story or Task to yourself and move it to In Progress.
+- You assign a Feature, PBI, User Story or Task to yourself and start it through
+  `/asdf:intake`. Assignment alone does not enroll it in background work.
 - ASDF drafts a high-level design (HLD), asks the questions it can't settle on its own, and waits for your approval.
 - After approval it works on its own. It plans, implements one task at a time with TDD, reviews its own work, opens the PR, handles review comments, and merges.
 
@@ -23,7 +24,7 @@ You step in for three things only: answering the HLD's questions, approving the 
 
 ```mermaid
 flowchart LR
-  A[Work item assigned to you,<br>moved to In Progress] --> B[Deep dive into the code,<br>HLD drafted, questions asked in rounds]
+  A[Work item assigned to you,<br>enrolled through intake] --> B[Deep dive into the code,<br>HLD drafted, questions asked in rounds]
   B -->|you answer in ADO<br>or in a session| B
   B -->|you approve| C[Plan and<br>implementation tasks]
   C --> D[Implement task by task,<br>TDD and a review per task]
@@ -92,22 +93,22 @@ flowchart LR
   searches the disk for repos or clones one.
 - **ADO access through MCP when work needs it.** ASDF discovers available tools
   in the running host, including existing local ADO servers and shared services
-  that accept an organization parameter. You do not need a new server per org
-  or a saved server association to complete init. ASDF uses MCP, never the `az`
-  CLI or REST calls.
+  that accept an organization parameter. Manual init prepares a dedicated
+  remote entry per organization so workflow tools do not depend on a local
+  server's version or filters. ASDF uses MCP, never the `az` CLI or REST calls.
 
-  The wizard's optional **MCP entries** review menu can prepare a remote entry
-  if you want one, but is skipped by default. Runtime errors identify the actual
-  org, capability and access failure; unattended runs leave affected items alone.
-
-  If you choose that optional remote setup, the wizard proposes:
+  The wizard stages these entries during review and writes them only at final
+  **Save**, preserving existing local servers and unrelated MCP settings:
 
   ```json
-  "ado-contoso": { "type": "http", "url": "https://mcp.dev.azure.com/contoso", "headers": { "X-MCP-Insiders": "true" }, "tools": ["*"] }
+  "asdf-ado-contoso": { "type": "http", "url": "https://mcp.dev.azure.com/contoso", "headers": { "X-MCP-Insiders": "true", "X-MCP-Toolsets": "wit,repos,pipelines" }, "tools": ["*"] }
   ```
 
-  The Insiders header enables the remote server's WIQL capability. Existing
-  local or host-provided tools need no such entry from ASDF.
+  The Insiders header enables remote WIQL; toolsets cover work items,
+  repositories/PRs and pipelines/builds. Name collisions or explicit restrictions
+  on the dedicated entry require manual review, never silent removal. Setup
+  does not start a server or authenticate. Runtime errors identify actual
+  capability/access failures; an absent server hint alone is not an error.
 
 ## Install
 
@@ -124,15 +125,30 @@ ASDF carries its own copy of the Superpowers engine, so **disable Superpowers an
 
 Then run the manual setup command below in a terminal.
 
-## Set up: `node asdf.js --init`
+## Set up: installed plugin
 
-From the plugin directory, run:
+After installing `asdf@asdf-dev`, run setup from **any directory** using the
+installed plugin's full path. No cloned checkout is needed.
 
-```shell
-node asdf.js --init
+**Windows (PowerShell):**
+
+```powershell
+node "$HOME\.copilot\installed-plugins\asdf-dev\asdf\asdf.js" --init
 ```
 
-Or use an absolute plugin path, for example `node "C:\tools\asdf\asdf.js" --init`.
+This resolves to `C:\Users\<username>\.copilot\installed-plugins\asdf-dev\asdf\asdf.js`
+with the standard Windows user profile.
+
+**macOS/Linux:**
+
+```shell
+node "$HOME/.copilot/installed-plugins/asdf-dev/asdf/asdf.js" --init
+```
+
+These commands use Copilot's standard installed-plugin location. For direct/local
+installs or a custom `COPILOT_HOME`, use the ASDF plugin root printed at session
+startup instead.
+
 Setup is **not a skill** and does not use a model, contact ADO, start an MCP server
 or sign in. It reads local Git metadata and prepares configuration files only.
 Agents and automation tell you to run it manually; they do not launch the wizard.
@@ -171,16 +187,18 @@ spaces and commas in a path are literal, not separators.
    them. `jdoe` produces branches such as `user/jdoe/12345-add-export`.
 6. **Review, then Save:** nothing is written before confirmation. `:back` returns
    to editing; `:cancel`, Ctrl+C or EOF cancels without saving. Menu **9: MCP
-   entries (optional)** can prepare local MCP configuration, but is not part of
-   the required questions. Without opting in, init does not inspect, validate,
-   create or update `mcp-config.json`. Existing MCP settings stay untouched.
+   entries (required)** shows the dedicated remote ADO entries staged for each
+   org. Save includes `mcp-config.json`; cancel writes nothing. Existing local
+   server entries are preserved. Setup does not log in or contact ADO.
 
 The config is `<context>\asdf.config.json`; its pointer stays in
 `~/.copilot/asdf/settings.json`, never `~/.asdf`. Only configs with numeric
 `schemaVersion: 2` are supported; version 1 configs are rejected, not migrated.
 Projects require explicit `watchScopes`. Custom `workItemTypes` must include
-`parent`, `task` and `feature` lists; an empty `feature` list disables Feature discovery.
-At least one repo and one watch source are required. Adding a repo does not
+`parent`, `task` and `feature` lists; an empty `feature` list disables Feature handling.
+At least one repo and one watch source are required by the existing setup.
+Watch settings are retained for compatibility; `bg-orch` does not use them
+to enroll work. Adding a repo does not
 subscribe its project, and a backlog does not implicitly choose a code repo.
 An org's `mcpServer` is optional. Existing values remain preference hints;
 a missing or stale hint does not block runtime discovery of another usable server.
@@ -196,12 +214,12 @@ permissions. Concurrent edits to configuration files involved in the save and
 partial write failures are reported. General Copilot preferences are read only
 for advisory plugin warnings and do not invalidate your setup draft.
 
-ADO access is exercised during normal intake/do-next and each item worker, not
+ADO access is exercised during normal intake/bg-orch and each item worker, not
 a separate first-run verification step. Tools are discovered by capability and
 their org/project routing is checked through the step's required reads before
 writes. Only a genuinely unavailable operation reports an access/capability
 problem; no init rerun is required just to supply a server hint. Unattended runs
-report problems without asking chat questions. If optional MCP configuration changed,
+report problems without asking chat questions. If MCP configuration changed,
 an already-running Copilot session may need its normal MCP reload.
 
 ## Daily use
@@ -217,7 +235,7 @@ an already-running Copilot session may need its normal MCP reload.
 | Send a design back | Reopen the HLD task before the PR is set to auto-complete. |
 | Review the PR | Review it as usual. ASDF fixes or answers each comment and merges once the PR is approved and green. |
 | Unblock an item | Reply to the `[ASDF] Blocked:` comment on it. The next run picks it up. |
-| Make progress right now | Run `/asdf:do-next`. |
+| Make progress right now | Run `/asdf:bg-orch`. |
 
 **Name the package in the work item**, for example `Payments` in its title or description. ASDF matches it to one of your workspaces. If the work item names no package you have a workspace for, ASDF asks: in the first HLD question round for a PBI, or in a comment on a Task.
 
@@ -277,7 +295,7 @@ Polling runs only while the host can process this interactive session.
 Busy tools/question forms, suspension or closing it may delay ticks. If
 scheduling is unavailable or disallowed, ASDF says so instead of installing
 a daemon or claiming a check is running. There are no new setup settings.
-Unattended do-next (including inline mode), persistent workers and subagents
+Unattended bg-orch (including inline mode), persistent workers and subagents
 do not create these live watches.
 
 A reservation covering the next polling delay plus ten minutes of grace
@@ -304,31 +322,38 @@ explicit approval, never closing the Feature as a design task.
 
 ## The hourly automation (GitHub Copilot app or CLI)
 
-`do-next` makes one pass through every tracked work item. It does all the work it finds, starting with the most-finished:
+`bg-orch` makes one pass through every tracked work item. It does all the work it finds, starting with the most-finished:
 
 1. PRs with new comments
 2. merges
 3. implementation in progress
 4. newly approved HLDs
 5. new answers to questions
-6. new In Progress items
+6. intake-tracked or descendant items newly moved to In Progress
 
-It also refreshes the snapshot of every assigned item. It never asks you anything; questions go to Azure DevOps. It ends with a short summary of what it did and what's waiting on people.
+It also refreshes snapshots of in-scope tracked items. It never asks you anything; questions go to Azure DevOps. It ends with a short summary of what it did and what's waiting on people.
 
-Discovery unions completed, paginated project/team results. Assignment refresh
-for already-tracked items is independent of those filters, so removing a watch
-does not abandon a running workflow. A failed or incomplete query is unknown,
-never evidence of reassignment, and a failed team query is never broadened to
-the whole project.
+**Intake controls scope.** New unrelated Features, PBIs/User Stories and Tasks
+must go through `/asdf:intake` before background work can begin. `bg-orch`
+starts from local tracked records and follows only verified child relations
+under them, including newly added descendants. Existing tracked items remain
+eligible without re-intake. Managed HLD/Review/implementation tasks still belong
+to their governing item, not independent workers. Related links and ancestor
+reads never enroll new roots or authorize sibling scans.
+
+The orchestrator does not search project/team watches or newly assigned work.
+With no tracked items it stops before contacting ADO. Tracked-ID assignment
+queries remain paginated and independent of watch settings; failed/incomplete
+reads are unknown, never evidence of reassignment or completion.
 
 To run it every hour, create the automation in the GitHub Copilot app:
 
-1. Create a new **local** automation, named for example "ASDF do-next".
+1. Create a new **local** automation, named for example "ASDF bg-orch".
 2. **Trigger:** CRON `0 6-23 * * *`, which runs every hour from 6 am to 11 pm.
-3. **Prompt:** `/asdf:do-next sessions` for persistent item conversations, or `/asdf:do-next` for the existing inline behavior.
+3. **Prompt:** `/asdf:bg-orch sessions` for persistent item conversations, or `/asdf:bg-orch` for the existing inline behavior.
 4. **Project:** a neutral local launch folder. The context folder can serve if the app supports it as a non-Git, in-place project; otherwise use a separate launcher project outside it. Do not initialize Git inside the context folder. The project selection does not grant access to all configured workspaces.
 5. Configure tool approvals according to your organization's policy and retain repository branch policies. The guard below is supplementary; it is not a replacement for permissions or server-side enforcement.
-6. Choose **Create and run**. Check that the run finishes and prints a `do-next` summary.
+6. Choose **Create and run**. Check that the run finishes and prints a `bg-orch` summary.
 
 Live sessions and automation both lock each item before updating its files or doing work. The owner is retained across handoffs and heartbeats; a competing operation defers the item. A lock goes stale after 90 minutes. If an item gets stuck, ASDF comments on it, marks it Blocked, and moves on. A failed final suite is repaired directly, with at most two attempts before blocking, rather than restarting a completed plan.
 
@@ -338,14 +363,16 @@ In **sessions** mode, each independent PBI/User Story, standalone Task/Bug, or
 Feature breakdown keeps one Copilot CLI session across runs. HLD, Review and
 implementation tasks stay in their governing item's conversation. Workers
 run sequentially within a pass and reuse ASDF's existing worktrees and ledger.
-Bare `do-next` and `do-next inline` keep working in the invoking conversation.
-Existing schedules are not rewritten automatically.
+Bare `bg-orch` and `bg-orch inline` keep working in the invoking conversation.
+`bg-orch` replaces `do-next`; update existing automation prompts and `/every`
+schedules to `/asdf:bg-orch` (or `/asdf:bg-orch sessions`). Existing schedules
+are not rewritten automatically.
 
 Both hosts use the same local CLI backend. Install Copilot CLI on PATH;
 ASDF checks for the required session/output options. Version `1.0.103-0` was
 used for the create/resume/export compatibility probe, not established as a
 minimum supported version. No SDK or additional runtime package is needed.
-For CLI scheduling, use `/every 1h /asdf:do-next sessions` while that coordinating
+For CLI scheduling, use `/every 1h /asdf:bg-orch sessions` while that coordinating
 CLI session remains running, or configure an external scheduler yourself.
 This hourly interval is not the app's restricted 6 am-11 pm cron schedule.
 
@@ -363,6 +390,16 @@ complete export; current-run activity is in `session\runs\<run-id>\events.jsonl`
 Run `node "<plugin root>\scripts\asdf.ts" session-info -Id <id>` for the same
 read-only metadata. These files remain after merge and worktree cleanup.
 Answers, approvals and PR feedback still belong in ADO.
+
+Use **`/asdf:sessions`** for a read-only table of all locally recorded session
+bindings and interactive watches, with **Session, Feature, PBI, Stage, and
+Current work/status** columns (no Task column). It includes waiting, completed
+and failed records, resolves hierarchy only from tracked local items, and
+does not select/resume sessions or contact ADO. Items without session records
+and replaced binding history are omitted. An interactive thread may have rows
+for several work items. Run `node "<plugin root>\scripts\asdf.ts" sessions`
+for the same snapshot as JSON. Recorded status does not establish whether a
+terminal is currently open.
 
 CLI-created conversations are **not guaranteed to appear as native desktop
 sidebar sessions**. The portable viewing surface is these local files.
@@ -469,12 +506,12 @@ Use `asdf.ts memory-path -Org <org> -Project <project> -Repo <repo>` for the enc
 ## Troubleshooting
 
 - **ASDF doesn't seem active in a session.** Its hooks run on Node.js. Check that `node --version` prints 22.18 or later in a new terminal, and that the plugin is enabled (`/plugin`).
-- **"ASDF is not initialized".** Run `node "<plugin root>\asdf.js" --init` manually.
-- **The `do-next` summary says "sign-in needed".** Open an interactive Copilot session so that org's Azure DevOps MCP server can sign in (`/mcp`).
+- **"ASDF is not initialized".** Run the [installed-plugin setup command](#set-up-installed-plugin) manually.
+- **The `bg-orch` summary says "sign-in needed".** Open an interactive Copilot session so that org's Azure DevOps MCP server can sign in (`/mcp`).
 - **ADO lookup or WIQL failure.** ASDF first discovers other available tools
   that can target the same org. If none can perform the required operation,
   check the reported server/capability/error. Re-run init only to correct
-  org/project/team values or explicitly prepare optional MCP configuration.
+  org/project/team values or prepare the required remote MCP configuration.
   Unsupported team queries are reported without expanding scope.
 - **An automation run stops at a permission prompt.** Configure only the required approvals through the host's normal permission controls. In sessions mode, check the child CLI separately; never disable safeguards to make it proceed.
 - **A session run fails or is incomplete.** Inspect `session-info`, the run's `stderr.log` and `events.jsonl`. Progress already recorded in state/ledger is preserved; a failed transcript export does not undo completed work.

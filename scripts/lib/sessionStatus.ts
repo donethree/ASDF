@@ -1,10 +1,10 @@
 import { renameSync, statSync } from 'node:fs';
 import { atomicJson, atomicText, check, object, optionalJson, text, time } from './artifacts.ts';
-import { getItem } from './items.ts';
+import { getItem, getItems } from './items.ts';
 import { identity, listRuns, readBinding, runPath, sessionPath,
   type ErrorInfo, type ItemIdentity, type SessionBinding, type WorkerRun } from './sessions.ts';
 import { readWorkerClaim, withItemGuard, workerNeedsRecovery } from './workerLease.ts';
-import { fail } from './util.ts';
+import { fail, same } from './util.ts';
 import { assertLiveMutation, readLiveWatch, type LiveWatch } from './liveWatch.ts';
 
 export type SessionStatus = {
@@ -14,6 +14,13 @@ export type SessionStatus = {
   transcriptPath: string | null; transcriptExportedAt: string | null;
   liveEventsPath: string | null; error: ErrorInfo | null;
   liveWatch: LiveWatch | null;
+};
+
+type WorkItemSummary = { id: number; title: string };
+export type SessionOverview = {
+  sessionId: string; mode: 'persistent' | 'interactive'; item: ItemIdentity;
+  feature: WorkItemSummary | null; pbi: WorkItemSummary | null;
+  stage: string; status: string; work: string;
 };
 
 export function getSessionStatus(id: number): SessionStatus {
@@ -64,6 +71,38 @@ export function getSessionStatus(id: number): SessionStatus {
     error: claim && workerNeedsRecovery(claim)
       ? { code: 'ASDF_SESSION_RECOVERY_REQUIRED', message: 'Unfinished worker requires operator investigation; verify all processes stopped before recovery.' }
       : latestRun?.error ?? latestRun?.observationError ?? null };
+}
+
+export function getSessions(): SessionOverview[] {
+  const items = getItems();
+  const rows: SessionOverview[] = [];
+  for (const item of items) {
+    const status = getSessionStatus(item.id);
+    if (!status.binding && !status.liveWatch) continue;
+    const related = (id: number) => items.find(other => other.id === id
+      && same(other.org, item.org) && same(other.project, item.project));
+    const parent = related(item.ado?.parentId);
+    const pbi = item.kind === 'parent' ? item : item.kind === 'task' && parent?.kind === 'parent' ? parent : null;
+    const ancestor = pbi ? related(pbi.ado?.parentId) : parent;
+    const feature = item.kind === 'feature' ? item : ancestor?.kind === 'feature' ? ancestor : null;
+    const work = [status.title, status.waiting?.reason].filter(Boolean).join(': ');
+    const common = {
+      item: status.item, stage: status.stage,
+      feature: feature ? { id: feature.id, title: feature.title } : null,
+      pbi: pbi ? { id: pbi.id, title: pbi.title } : null,
+    };
+    if (status.binding) {
+      rows.push({ ...common, sessionId: status.binding.sessionId, mode: 'persistent',
+        status: status.error?.code === 'ASDF_SESSION_RECOVERY_REQUIRED' ? 'recovery-needed'
+          : status.latestRun?.state ?? status.binding.provisioning,
+        work: status.error ? `${work}; ${status.error.code}: ${status.error.message}` : work });
+    }
+    if (status.liveWatch) {
+      rows.push({ ...common, sessionId: status.liveWatch.threadId, mode: 'interactive',
+        status: status.liveWatch.status, work });
+    }
+  }
+  return rows;
 }
 
 export function refreshSessionStatus(id: number, syncedAt?: string, owner?: string): SessionStatus {

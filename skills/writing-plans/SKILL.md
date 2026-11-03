@@ -12,7 +12,7 @@ This runs on its own once the HLD is approved (stage `approved`). Nobody is aske
 Pending accepted feedback blocks planning until a revised request is published
 and approved, or a shared owner's fresh approval resolves delegated feedback.
 Preserve live origin/thread/root when supplied: continue the
-same conversation, not do-next or another CLI worker. The live controller owns
+same conversation, not bg-orch or another CLI worker. The live controller owns
 wait scheduling; planning and its subagents never create their own watches.
 
 Reuse the caller's item operation owner (`asdf:using-asdf`), or acquire one for a direct entry. Carry it into implementation. On the standalone Task path, `item.md` defines the deliverable; the approved parent HLD supplies constraints, not additional work. Scope every task and the spec-coverage self-review to that deliverable.

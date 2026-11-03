@@ -6,7 +6,7 @@ import { getItem, getItems, itemPath, newItem, setItem, setItemRepo, setItemStag
 import { heartbeat, lockItem, unlockItem } from './lock.ts';
 import { getQueue, getQueueReport } from './queue.ts';
 import { completeWorker, failWorker, recoverSession, validateRequest, validateWorkerRequest } from './sessions.ts';
-import { getSessionStatus, refreshSessionStatus } from './sessionStatus.ts';
+import { getSessions, getSessionStatus, refreshSessionStatus } from './sessionStatus.ts';
 import { readWorkerClaim, withItemGuard } from './workerLease.ts';
 import { findRepoSkills } from './repoSkills.ts';
 import { ledgerAdd, reviewPackage, runBaseline, taskBrief, taskDone, taskStart } from './sdd.ts';
@@ -128,6 +128,7 @@ export const COMMANDS: Record<string, Command> = {
   },
   'queue': { optional: ['Now'], run: (p) => getQueue(p.Now) },
   'queue-report': { optional: ['Now'], run: (p) => getQueueReport(p.Now) },
+  'sessions': { run: () => getSessions() },
   'session-info': { required: ['Id'], numbers: ['Id'], run: (p) => getSessionStatus(p.Id) },
   'worker-request': { required: ['Id', 'RunId', 'Owner'], numbers: ['Id'], run: (p) => validateWorkerRequest(p.Id, p.RunId, p.Owner) },
   'worker-complete': { required: ['Id', 'RunId', 'Owner', 'File'], numbers: ['Id'], file: 'Result', run: (p) => completeWorker(p.Id, p.RunId, p.Owner, p.Result) },

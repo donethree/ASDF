@@ -101,8 +101,8 @@ describe('manifests', () => {
     assert.match(read('README.md'), new RegExp(`Node\\.js ${major}\\.${minor} or later`));
   });
 
-  it('documents the Insiders header used by local MCP configuration', () => {
-    assert.match(read('README.md'), /"headers": \{ "X-MCP-Insiders": "true" \}/);
+  it('documents the Insiders header used by remote MCP configuration', () => {
+    assert.match(read('README.md'), /"headers": \{ "X-MCP-Insiders": "true"[, }]/);
   });
 
   it('writing-plans leaves splitting large work to the Feature breakdown', () => {

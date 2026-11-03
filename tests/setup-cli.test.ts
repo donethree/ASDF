@@ -44,7 +44,9 @@ describe('public ASDF launcher', () => {
     assert.equal(result.status, 0, result.stderr + result.stdout);
     assert.equal(JSON.parse(readFileSync(settings, 'utf8')).contextPath, context);
     assert.equal(JSON.parse(readFileSync(join(context, 'asdf.config.json'), 'utf8')).userName, 'jdoe');
-    assert.equal(existsSync(join(home, '.copilot', 'mcp-config.json')), false);
+    const mcp = JSON.parse(readFileSync(join(home, '.copilot', 'mcp-config.json'), 'utf8'));
+    assert.equal(mcp.mcpServers['asdf-ado-contoso'].url, 'https://mcp.dev.azure.com/contoso');
+    assert.equal(mcp.mcpServers['asdf-ado-contoso'].headers['X-MCP-Insiders'], 'true');
   });
 
   it('updates existing configuration through --init while an item operation is held', () => {

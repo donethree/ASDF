@@ -120,10 +120,14 @@ not change workflow state, approvals or permissions.
 [`asdf.js`](asdf.js) dispatches `--init` to the deterministic numbered wizard.
 It is not a skill and never invokes a model, MCP server, login or ADO request.
 Other arguments retain the existing JSON CLI behavior.
-MCP preparation is a review-menu opt-in, not a required section. Default setup
-neither reads nor snapshots `mcp-config.json`; unrelated external MCP edits
-cannot invalidate that draft. `loadSetupMcp` loads/snapshots it only on explicit
-opt-in, retaining concurrency and rollback checks for approved edits.
+MCP preparation is required at draft review: `prepareSetupSave` loads and
+snapshots `mcp-config.json` and stages a dedicated `asdf-ado-<org>` remote
+entry for every configured org. These entries expose wit/repos/pipelines,
+with the Insiders header for WIQL. Existing local entries and unrelated data
+are preserved; name collisions, malformed files and explicitly restricted
+dedicated entries block Save instead of being overwritten or unrestricted.
+Only final Save persists edits, retaining concurrency and rollback checks.
+Setup makes no ADO calls and cannot establish authentication or availability.
 
 | Module | Responsibility |
 |---|---|
@@ -163,15 +167,17 @@ and reconcile uncertain write outcomes rather than replaying them on another
 server. Actual inaccessible operations report their target/capability/error.
 
 `discovery-sources` enumerates explicit watches; `discovery-query` verifies the
-source snapshot/index and generates its escaped query. `assignment-query`
+source snapshot/index and generates its escaped query. These legacy helpers
+are not used by `bg-orch`; watch settings never enroll background work.
+`assignment-query`
 checks tracked IDs independently of discovery filters. `query-page` validates
 ascending ID pages and returns a continuation cursor; these helpers perform
 no network calls. Skills execute the returned queries through ADO MCP.
 
 ### Persistent CLI workers
 
-`do-next sessions` uses [asdf-worker.ts](scripts/asdf-worker.ts), an asynchronous
-Node entry point separate from the synchronous ASDF CLI. Bare do-next keeps
+`bg-orch sessions` uses [asdf-worker.ts](scripts/asdf-worker.ts), an asynchronous
+Node entry point separate from the synchronous ASDF CLI. Bare bg-orch keeps
 inline execution. Both modes share [work-item](skills/work-item/SKILL.md) for
 single-item stage routing, rather than duplicating ADO decisions in Node.
 
@@ -213,7 +219,7 @@ ADO business blockers, and existing approval/merge rules are unchanged.
 | `node asdf.js --init` in a terminal | [Manual wizard](scripts/lib/setup.ts) | Local-only context/config/MCP preparation with examples and repeated individual entries. |
 | "work on PBI 12345" | [`intake`](skills/intake/SKILL.md) | Gets the work item, creates its folder, and routes it. A PBI or User Story gets a size check first, and a large one can become a Feature. |
 | "work on Feature 4120" | [`intake`](skills/intake/SKILL.md), then [`feature-breakdown`](skills/feature-breakdown/SKILL.md) | Breaks the Feature into PBIs, each with its own HLD and PR. |
-| `/asdf:do-next`, by hand or from an hourly automation | [`do-next`](skills/do-next/SKILL.md) | One pass over every tracked item. |
+| `/asdf:bg-orch`, by hand or from an hourly automation | [`bg-orch`](skills/bg-orch/SKILL.md) | One pass over every tracked item. |
 | "let's go through the open questions for 12345" | [`brainstorming`](skills/brainstorming/SKILL.md) | Answers a question round in a live session. |
 
 Every session also gets [`using-asdf`](skills/using-asdf/SKILL.md) from the sessionStart hook: the rules, and which skill to use when.
@@ -229,7 +235,7 @@ Every session also gets [`using-asdf`](skills/using-asdf/SKILL.md) from the sess
 
 Every tracked work item has a folder in the asdf-context, and its `state.json` holds exactly one stage. Stages change in two ways:
 
-- **Signals.** `do-next` reads ADO (work item states, HLD-task comments, PR state), writes what it read to a signals file, and runs `asdf.ts signals`. Fixed rules turn that into a stage change. This is how people's actions reach ASDF: moving a PBI to In Progress, answering, approving, reviewing.
+- **Signals.** `bg-orch` reads ADO (work item states, HLD-task comments, PR state), writes what it read to a signals file, and runs `asdf.ts signals`. Fixed rules turn that into a stage change. This is how people's actions reach ASDF: moving a PBI to In Progress, answering, approving, reviewing.
 - **Skills.** A skill runs `asdf.ts stage` when it finishes its step.
 
 The main path:
@@ -305,12 +311,12 @@ stateDiagram-v2
 ```
 
 - **The design task** of a Feature is its Breakdown task, kept in the same fields as an HLD task (`ado.hldId`, `hld.*`), so the round and approval rules apply unchanged.
-- **The PBIs** are recorded in `ado.pbis`, each with the PBIs it waits for. A PBI that waits for another stays Proposed until a person starts it; `signals` reports it as `ready` once what it waits for is Completed, and `do-next` lists it in its summary.
+- **The PBIs** are recorded in `ado.pbis`, each with the PBIs it waits for. A PBI that waits for another stays Proposed until a person starts it; `signals` reports it as `ready` once what it waits for is Completed, and `bg-orch` lists it in its summary.
 - **A large PBI** can become a Feature before its design starts: `intake` asks in a session, and `brainstorming` asks in the first round. On a yes, the PBI is parked at `tracked` (Proposed in ADO) until the breakdown is approved, and its `size` is `phase`.
 
 ### Who handles each stage
 
-`do-next` works the stages that have a queue priority, lowest number first (`STAGE_PRIORITY` in [`items.ts`](scripts/lib/items.ts)). The other stages wait for a person or for ADO, and only the signal rules move them on.
+`bg-orch` works the stages that have a queue priority, lowest number first (`STAGE_PRIORITY` in [`items.ts`](scripts/lib/items.ts)). The other stages wait for a person or for ADO, and only the signal rules move them on.
 
 | Stage | Waiting for | Priority | Handled by | Usually moves to |
 |---|---|---|---|---|
@@ -358,28 +364,35 @@ stateDiagram-v2
 
 A *human comment* is one whose plain text doesn't start with `[ASDF]`. Plain text means HTML stripped, `@mention` anchors and Markdown `@<id>` mentions removed, entities decoded, and Markdown escapes and emphasis (`*`, `_`, `~`, backticks) dropped. `invokeSignals` applies the result. With `-Owner`, it first verifies/heartbeats that owner's lock; without it, it skips locked items for compatibility. For a Feature at `awaiting-pbis`, it also returns `ready` from `readyPbis`: the PBIs still Proposed whose every prerequisite is Completed.
 
-Flags that `do-next` writes by hand (`assignedToMe`, `lastCommentIsAsdf`, `mergeConflicts`, `approved`) are read leniently: booleans, `1` and `0`, and the text `true` and `false` in any case.
+Flags that `bg-orch` writes by hand (`assignedToMe`, `lastCommentIsAsdf`, `mergeConflicts`, `approved`) are read leniently: booleans, `1` and `0`, and the text `true` and `false` in any case.
 
-### A do-next pass
+### A bg-orch pass
 
 ```mermaid
 flowchart TD
-    check["settings, config,<br>an owner id for this pass"] --> orgs{"each org: discovered MCP reads<br>and WIQL usable?"}
+    check["settings, config, items,<br>an owner id for this pass"] --> roots{"any tracked roots?"}
+    roots -->|no| summary["summary"]
+    roots -->|yes| orgs{"each scoped org: discovered MCP reads<br>and WIQL usable?"}
     orgs -->|no| skip["skip the org, and report it"]
-    orgs -->|yes| sync["Scoped discovery and tracked assignment<br>item-new, item.md, signals"]
+    orgs -->|yes| sync["Tracked roots and verified descendants<br>bounded assignment, item.md, signals"]
     sync --> queue["asdf.ts queue"]
     queue --> next{"an item not yet handled<br>at its current stage?"}
     next -->|yes| work["lock, run the stage's skill<br>with heartbeats, unlock"]
     work --> queue
-    next -->|no| summary["summary"]
+    next -->|no| summary
 ```
 
-1. **Check.** `asdf.ts settings` and `config`, and one owner id for every lock this pass takes.
+1. **Check.** `asdf.ts settings`, `config` and `items`. Local records are
+   intake roots (existing records are grandfathered); an empty inventory stops
+   before MCP/ADO discovery. Create one owner for every lock this pass takes.
 2. **Reach each org.** Discover work-item/WIQL tools in the running host; use saved
    hints only as preferences and verify target identity through required reads.
    Skip/report only when no candidate can perform the operation. Its items stay untouched.
 3. **Sync.**
-   - Paginated queries discover open assigned work from explicit project/team scopes, leaving out ASDF's own tasks (tag `asdf`). Failed scopes are reported, not widened.
+   - Follow verified downward hierarchy child relations from tracked roots.
+     New unrelated assignments require intake; no project/team watch queries,
+     ancestor enrollment or sibling scans. Recheck each child's current parent,
+     type and ownership before tracking. Other owners' containers are read-only.
    - Separate paginated queries for tracked IDs determine assignment without team/area/type/tag/completed filters, including projects without watches. An incomplete/failed batch is unknown and its items receive no signals or work that pass.
    - Classify Features and PBIs before Tasks. New ids get `item-new`, which refuses design tasks and unstarted children governed by a tracked, nonpaused, unfinished PBI in the same org. Existing standalone work retains its workflow/PR; the parent must not plan overlapping work. Numeric ids that another org already tracks still report a collision.
    - Acquire each item's lock before refreshing its snapshot or signals file; skip held items without overwriting their context.
@@ -392,7 +405,7 @@ Live sessions use the same item-operation lock protocol as hourly passes, retain
 ### Work items and comments in ADO
 
 - **At pickup,** ASDF creates an HLD task and a Review task under the parent. A Feature gets only a Breakdown task (`Breakdown: <feature title>`, tag `asdf-breakdown`).
-- **After approval,** it creates one implementation task per plan step. On the Task path, the Task itself is the implementation task. After a Feature's breakdown is approved, it creates the PBIs the breakdown lists: ordinary PBIs with no ASDF tags, so the assigned-items query finds them.
+- **After approval,** it creates one implementation task per plan step. On the Task path, the Task itself is the implementation task. After a Feature's breakdown is approved, it creates and tracks the PBIs the breakdown lists: ordinary PBIs with no ASDF tags, within the tracked Feature's background scope.
 - **A Feature,** with the person's OK, when a large PBI becomes one. The PBI goes under it.
 - **Tags and assignee.** ASDF's tasks are tagged `asdf`, plus `asdf-hld`, `asdf-review`, `asdf-impl` or `asdf-breakdown`, and assigned to the parent's assignee.
 - **An existing HLD task** on the parent is adopted instead of creating a second one, and so is an existing Breakdown task on a Feature. `ado.hldOwned` records whether this item created, or drives, its design task. ASDF only closes or reopens design tasks it owns.
@@ -460,7 +473,8 @@ A skill is invoked as `asdf:<name>`, where `<name>` is its folder. Its frontmatt
 |---|---|---|
 | [`using-asdf`](skills/using-asdf/SKILL.md) | The bootstrap: ASDF's rules, and which skill to use when. Injected into every session. | Adapted (from `using-superpowers`) |
 | [`intake`](skills/intake/SKILL.md) | The entry point for session work: finds the work item, creates its folder, routes it. Owns Task routing: small, or complex with or without a parent. | ASDF |
-| [`do-next`](skills/do-next/SKILL.md) | One unattended pass: sync, signals, then the queue, most-finished work first. Never asks. | ASDF |
+| [`bg-orch`](skills/bg-orch/SKILL.md) | One unattended pass: sync, signals, then the queue, most-finished work first. Never asks. | ASDF |
+| [`sessions`](skills/sessions/SKILL.md) | Read-only table of recorded sessions, Feature/PBI associations, stages and current work/status. | ASDF |
 | [`ado-work-items`](skills/ado-work-items/SKILL.md) | Every ADO convention: MCP tools, the WIQL, states by category, task titles and tags, comments, the signals recipe. [`templates.md`](skills/ado-work-items/templates.md) holds every comment. | ASDF |
 | [`brainstorming`](skills/brainstorming/SKILL.md) | The HLD. Does the deep dive into the code, drafts the HLD, asks question rounds, records decisions with provenance, runs the [builder check](skills/brainstorming/builder-check-prompt.md) and the [code check](skills/brainstorming/code-check-prompt.md), and requests approval. | Adapted |
 | [`feature-breakdown`](skills/feature-breakdown/SKILL.md) | Breaks a Feature into PBIs: its requirements, and the PBIs in order, with question rounds and approval on a Breakdown task and a [breakdown check](skills/feature-breakdown/breakdown-check-prompt.md). Creates the PBIs, and closes the Feature once they're finished. Also makes a large PBI into a Feature. | ASDF |
@@ -530,7 +544,8 @@ node "<plugin root>/scripts/asdf.ts" <command> -Name value ...
 | `code-path` | `codePath` | `-Id -Owner -Path`: resolves an edit target against the verified code root and returns an absolute path plus applicable directory-instruction files. Rejects escapes, metadata and nested repos. Scoped instruction files remain candidates whose scope must be evaluated by the worker. |
 | `stage` | `setItemStage` | `-Id -Stage [-Reason] [-WorkItemId]`: moves the item and records when and why. `blocked` needs `-Reason`, and records the blocker. |
 | `signals` | `invokeSignals` | `-Id -File [-Owner]`: applies rules under the supplied owner's lock; otherwise skips locked items. A waiting Feature also returns `ready`. |
-| `queue` | `getQueue` | The items `do-next` can work on now, in order. |
+| `queue` | `getQueue` | The items `bg-orch` can work on now, in order. |
+| `sessions` | `getSessions` | Read-only local session/work-item associations with Feature, PBI, stage and work/status; no ADO access or resumption. |
 | `lock` | `lockItem` | `-Id -Owner`: takes the item's lock, and returns whether it was `acquired`. |
 | `heartbeat` | `heartbeat` | `-Id -Owner`: keeps the lock fresh. |
 | `unlock` | `unlockItem` | `-Id -Owner`: releases the lock. Only its owner can. |
@@ -623,7 +638,7 @@ Conventions:
 |---|---|
 | `settings.json`, `asdf.config.json` | Manual guided setup with confirmed local save; programmatic `settings-set` and `config-set` remain compatible |
 | `state.json`, `.lock` | the CLI only |
-| `item.md` | `intake` and `do-next` |
+| `item.md` | `intake` and `bg-orch` |
 | `execution-context.json` | The controller saves `execution-context` output after worktree setup and refreshes it before dispatch/resume. Workers revalidate; it is not a host permission grant. |
 | `baseline.json`, `baseline.log` | `baseline` records the actual build/test commands, codeRoot, branch, HEAD, exit code and result. It is reused across sessions while checkout and branch are unchanged and HEAD descends from it. A red result means known failures, summarized by the controller in `known-failures.md`; only other failures block tasks and the PR. |
 | `deep-dive.md` | `brainstorming`, or `feature-breakdown` for a Feature. `writing-plans` and `requesting-code-review` read it. |
@@ -686,7 +701,7 @@ npm test
 
 | To change | Edit | Also update |
 |---|---|---|
-| A stage or a transition | `items.ts` (stages, priorities) and `signals.ts` (rules) | The signals, items and queue tests; the stage tables in `do-next` and in this document |
+| A stage or a transition | `items.ts` (stages, priorities) and `signals.ts` (rules) | The signals, items and queue tests; the stage tables in `bg-orch` and in this document |
 | A CLI command | The library function, and its entry in the command table in `cli.ts` | `cli.test.ts`; the command table above (a test checks it) |
 | A guard rule | `scripts/lib/guard.ts`, plus the matcher in `hooks.json` for a new tool | `guard.test.ts`; the guard section of the README |
 | An ADO comment | `skills/ado-work-items/templates.md` | The skill that posts it |

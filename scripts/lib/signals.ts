@@ -1,4 +1,4 @@
-// ADO signals -> stage transitions. Pure rules over a signals object that do-next gathers through the ADO MCP server.
+// ADO signals -> stage transitions. Pure rules over a signals object that bg-orch gathers through the ADO MCP server.
 import { getItem, setItem, setItemStage } from './items.ts';
 import { heartbeat, isLocked } from './lock.ts';
 import { isFalse, isTrue, now, oneOf, parseTime, prop, same, stamp, toList, type Json } from './util.ts';

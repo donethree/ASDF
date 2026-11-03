@@ -7,7 +7,7 @@ description: Use when an ASDF PR has review comments, a failed build, or merge c
 
 ## ASDF: PR feedback (stage `pr-feedback`)
 
-ASDF reaches this skill from do-next or live-continuation when a PR has a human
+ASDF reaches this skill from bg-orch or live-continuation when a PR has a human
 thread, a failed build, or a merge conflict. Everything below about evaluating
 feedback applies. Unattended questions go in the PR thread, never chat. In
 explicit live mode, the user can give direction in the conversation; record
@@ -24,7 +24,7 @@ For active-PR code work, refresh the execution context and follow `asdf:using-as
 3. **A failed build.** Read the logs (`pipelines_build_log`), find the cause (`asdf:systematic-debugging`), fix it, and push.
 4. **A merge conflict.** Merge the default branch into the item's branch (`git -C "<codeRoot>" merge origin/<default branch>`). Resolve, retest, and push. Never rebase, never force-push.
 5. **Stuck.** After two failed attempts at the same problem, post the `blocker` comment on the item and run `asdf.ts stage -Id <id> -Stage blocked -Reason "<short reason>"`.
-6. **Done.** When every human thread has a reply or a fix, run `asdf.ts stage -Id <id> -Stage pr-open` with the live Owner when applicable. Return to live-continuation in live mode to monitor approval/checks; otherwise return to do-next as before.
+6. **Done.** When every human thread has a reply or a fix, run `asdf.ts stage -Id <id> -Stage pr-open` with the live Owner when applicable. Return to live-continuation in live mode to monitor approval/checks; otherwise return to bg-orch as before.
 7. **No new dependencies.** If a reviewer asks for one the HLD didn't list, that's a blocker: stop and ask, don't add it.
 
 ## Overview

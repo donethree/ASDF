@@ -6,8 +6,8 @@ description: Use when a manually started interactive ASDF item waits for design 
 # Continue the current interactive work
 
 This controller stays in the originating conversation. It uses the host's
-session scheduler, not do-next, another CLI process or a sleeping shell command.
-Unattended do-next, persistent workers (`ASDF_WORKER_REQUEST`) and subagents
+session scheduler, not bg-orch, another CLI process or a sleeping shell command.
+Unattended bg-orch, persistent workers (`ASDF_WORKER_REQUEST`) and subagents
 never enter it or create watches. A scheduled check for an existing live watch
 retains its original **live** mode; it is not an unattended worker.
 
@@ -48,7 +48,7 @@ With the item's operation lock held:
 
 1. Discover the host scheduler's actual schema. When `manage_schedule` supports
    create/list/stop, use it below. If unavailable or disallowed, say automatic
-   checks are unavailable; release ownership and retain manual/do-next behavior.
+   checks are unavailable; release ownership and retain manual/bg-orch behavior.
    Do not enable experiments, change permissions or substitute a daemon.
 2. `live-prepare -Id <id> -Owner <owner> -ThreadId <threadId> -RootId <rootId>`.
    Save the returned key and presented target. Reuse an already-armed matching
@@ -61,7 +61,7 @@ With the item's operation lock held:
    ASDF live check: item <id>, watch <watchId>, generation <generation>.
    Use asdf:live-continuation in this same originating interactive thread.
    Reload live-info and validate this exact key before acquiring an operation.
-   Stop stale checks; do not run do-next, create workers or infer approval from chat history.
+   Stop stale checks; do not run bg-orch, create workers or infer approval from chat history.
    CLI: <quoted executable/script from session context>; context: <context path>.
    ```
 
@@ -154,7 +154,7 @@ ownership, stop without further item mutations or unlock.
    old tick is now harmless. Failed schedule deletion is reported; never claim
    it stopped, and reconcile its exact old marker without blocking valid work.
 7. If ownership is lost, stop immediately without further item/ADO writes or
-   unlock. An expired reservation may already have been taken by do-next:
+   unlock. An expired reservation may already have been taken by bg-orch:
    reread actual state on a later successful acquisition, never replay old work.
 
 If ADO shows a different design version than the presented target, do not apply
@@ -213,7 +213,7 @@ local watch; manual rejoin starts fresh under ordinary ownership rules.
 Dispatch `asdf:work-item` with origin live, held owner, threadId and rootItemId.
 Its shared stage table handles planning/implementation/review/merge in this
 conversation. At the next supported wait return here once. Do not recurse into
-intake, do-next or a persistent CLI worker.
+intake, bg-orch or a persistent CLI worker.
 
 PR chat "approved" never substitutes for votes or branch policies. Live PR
 feedback may direct code changes with recorded provenance, but cannot fabricate

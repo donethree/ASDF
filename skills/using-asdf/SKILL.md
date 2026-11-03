@@ -12,7 +12,7 @@ If you were dispatched as a subagent to execute a specific task, ignore this ski
 ASDF (Automated Software Development Workflow) runs the whole development cycle against Azure DevOps (ADO) work items. It designs an HLD, gets it approved, plans, implements one task at a time with TDD, reviews its own work, opens the PR, and merges. It does the steering between those steps itself, so people only answer HLD questions, approve the HLD, and review the PR. Every key decision goes into ADO with who made it.
 
 **Persistent worker entry:** if the invocation supplies `ASDF_WORKER_REQUEST`,
-load `asdf:work-item`, not intake or do-next. Validate the current request
+load `asdf:work-item`, not intake or bg-orch. Validate the current request
 with `worker-request` before mutations. Old conversation owners and completed
 task claims are not authority. The Node runner owns the lock lifecycle;
 nested skills never unlock that governing item or recursively dispatch workers.
@@ -23,7 +23,7 @@ threadId and rootItemId through skill handoffs. At design/PR waits use
 `asdf:live-continuation` for same-session checks starting at five minutes,
 increasing by five up to sixty, chat approval/feedback and safe resumption.
 A scheduled prompt for an existing live watch
-keeps that live origin. do-next, persistent workers and subagents never arm
+keeps that live origin. bg-orch, persistent workers and subagents never arm
 these watches. A missing host scheduler is reported, not silently substituted.
 
 ## The rules
@@ -42,12 +42,16 @@ these watches. A missing host scheduler is reported, not silently substituted.
 | Situation | Skill |
 |---|---|
 | The user asks to work on, build, fix, or change something | `asdf:intake` |
-| "do next", "make progress", or an automation run | `asdf:do-next` |
-| A runner-supplied worker request or an inline item handoff from do-next | `asdf:work-item` |
+| "bg-orch", "background orchestrator", "make progress", or an automation run | `asdf:bg-orch` |
+| A runner-supplied worker request or an inline item handoff from bg-orch | `asdf:work-item` |
 | A registered live-check prompt, live approval/feedback, or manual rejoin of a watched item | `asdf:live-continuation` |
 | "Answer the open questions for <id>" | `asdf:brainstorming` |
 | ASDF isn't initialized, or its settings should change | Tell the user to run the manual setup command shown in session context, then stop; setup is not a skill |
 | Any ADO read or write | `asdf:ado-work-items` |
+
+`bg-orch` advances only intake-tracked items and verified descendants. Existing
+local records remain eligible. New unrelated assignments require intake first;
+project/team watches never enroll them in a background pass.
 
 The engine, by stage:
 
@@ -77,13 +81,18 @@ The session context gives you three lines:
 
 In ASDF's skills, `asdf.ts <command>` is short for that CLI line. Use the CLI for all ASDF state: item folders, stages, locks, the work queue, ADO signals, and the SDD workspace. Never edit `state.json` by hand. The CLI prints JSON and exits 1 with `{"error": ...}` on failure. If settings or config are missing, tell the user to run `node "<plugin root>\asdf.js" --init` manually and stop. Never launch the interactive wizard from a skill or automation.
 
-Setup writes local configuration only; MCP preparation is optional and skipped
-by default. Discover host-provided ADO tools at runtime using
+Manual setup stages a dedicated remote ADO MCP entry per configured org,
+with `X-MCP-Toolsets: wit,repos,pipelines` and `X-MCP-Insiders: true` for WIQL,
+and writes only at final Save. Name collisions or explicit restrictions on a
+dedicated entry block Save and require manual review; never overwrite them or
+remove restrictions automatically. It preserves existing local servers and does not launch a server,
+authenticate or contact ADO. Discover host-provided ADO tools at runtime using
 `asdf:ado-work-items`, including local servers without a saved mcpServer hint.
 Only report an access problem when a required operation has no usable candidate.
 Include the actual org/project/team, capability and server error. In a live
-session clarify that problem; manual init is for correcting setup values,
-not for supplying a mandatory server association. Unattended runs report it
+session clarify that problem; manual init can correct setup values or prepare
+the required remote configuration, but a missing saved hint alone is not an
+access failure and never forces re-init. Unattended runs report actual failures
 without chat questions or changing business stages. There is no separate
 first-run verification workflow.
 

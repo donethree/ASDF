@@ -1,12 +1,13 @@
 # Scenario: lightweight loop decision logging
 
-Read-only simulation using do-next and work-item. No real tool/model/MCP calls
+Read-only simulation using bg-orch and work-item. No real tool/model/MCP calls
 or user configuration writes.
 
 ## Inputs
 
 1. All reads succeed; twenty tracked items remain in external waiting states.
-2. One source fails; a new PBI 42 is tracked and selected as approved. Router
+2. One tracked hierarchy branch fails to refresh; verified child PBI 42 is
+   tracked under an intake-rooted Feature and selected as approved. Router
    phases return approved -> implementing, then implementing -> pr-open.
 3. The persistent request has passId `pass-a`, owner `worker-b` and a distinct
    native CLI session ID.

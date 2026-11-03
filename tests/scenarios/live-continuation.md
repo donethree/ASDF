@@ -18,7 +18,7 @@ skills to these independent cases.
 - An owned PR gets feedback, then approval/green checks, then completed. Show
   real policy checks, no chat-vote shortcut, watch rearm and final cleanup.
 - Host scheduling is missing; an ask_user form is still pending; invocation is
-  do-next inline, ASDF_WORKER_REQUEST, or a task-review subagent.
+  bg-orch inline, ASDF_WORKER_REQUEST, or a task-review subagent.
 - An unchanged wait receives checks at delays of 5, 10, 15 minutes, continuing
   by five to 60. Show retired-timer cancellation, returned-generation binding,
   ownership through replacement, cap reuse, and restored missing timers without

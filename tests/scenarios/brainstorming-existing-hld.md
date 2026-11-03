@@ -2,13 +2,13 @@
 
 ## Setup
 
-- `do-next` pass, unattended. PBI 600 "Bulk delete" (kind parent) is in stage `new`. It's assigned to you and In Progress. Its `ado.hldId` is empty.
+- `bg-orch` pass, unattended. PBI 600 "Bulk delete" (kind parent) is in stage `new`. It's assigned to you and In Progress. Its `ado.hldId` is empty.
 - PBI 600 has one child: Task 601 "Design: bulk delete". It's assigned to Bob Lee, is In Progress (InProgress category), and has no tags.
 - `asdf.ts items` lists no item whose `ado.hldId` is 601.
 
 ## Prompt
 
-"Dry run: you're in an unattended do-next pass and item 600 is in stage new. Using the brainstorming skill (and ado-work-items for conventions), describe exactly what you'd do, in order: the MCP calls, the files you'd write, the comments you'd post, and the CLI commands. Don't execute anything."
+"Dry run: you're in an unattended bg-orch pass and item 600 is in stage new. Using the brainstorming skill (and ado-work-items for conventions), describe exactly what you'd do, in order: the MCP calls, the files you'd write, the comments you'd post, and the CLI commands. Don't execute anything."
 
 ## Expected
 

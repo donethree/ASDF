@@ -1,9 +1,9 @@
-# Scenario: do-next with Features waiting on their PBIs
+# Scenario: bg-orch with Features waiting on their PBIs
 
 ## Setup
 
-- `do-next` pass, unattended. Org `contoso`, MCP server `ado-contoso`, project `Commerce`. `workItemTypes.parent` is `["Product Backlog Item", "User Story"]`.
-- Feature 4120 is assigned to you and In Progress, at stage `awaiting-pbis`.
+- `bg-orch` pass, unattended. Org `contoso`, MCP server `ado-contoso`, project `Commerce`. `workItemTypes.parent` is `["Product Backlog Item", "User Story"]`.
+- Intake-tracked Feature 4120 is assigned to you and In Progress, at stage `awaiting-pbis`.
   - `ado.pbis`: 4100 waiting for nothing, and 4121 waiting for 4100.
   - `ado.hldId` is 4122, its Breakdown task, which ASDF closed (Completed, `hld.closedAt` set).
   - In ADO, 4100 is Completed (merged and closed in an earlier pass), and 4121 is Proposed. The Feature's children are 4100, 4121 and the Breakdown task 4122.
@@ -12,7 +12,7 @@
 
 ## Prompt
 
-"Dry run: using the do-next skill (and the skills it sends you to), describe exactly what this pass does for Features 4120 and 4500: the signals files you'd write, with their sections; the CLI commands, with the results the CLI's rules would give; the work done; and the lines the summary would contain. Don't execute anything."
+"Dry run: using the bg-orch skill (and the skills it sends you to), describe exactly what this pass does for Features 4120 and 4500: the signals files you'd write, with their sections; the CLI commands, with the results the CLI's rules would give; the work done; and the lines the summary would contain. Don't execute anything."
 
 ## Expected
 

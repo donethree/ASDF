@@ -1,4 +1,4 @@
-// Per-item locks (<item>/.lock) so overlapping do-next passes never work the same item.
+// Per-item locks (<item>/.lock) so overlapping bg-orch passes never work the same item.
 import { closeSync, existsSync, openSync, rmSync, statSync, writeSync } from 'node:fs';
 import { join } from 'node:path';
 import { itemPath } from './items.ts';

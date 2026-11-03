@@ -2,7 +2,7 @@
 
 ## Setup
 
-- `do-next` pass, unattended. Org `contoso`, MCP server `ado-contoso`, project `Commerce`. `workItemTypes.parent` is `["Product Backlog Item", "User Story"]`, and the project's process has `Product Backlog Item`.
+- `bg-orch` pass, unattended. Org `contoso`, MCP server `ado-contoso`, project `Commerce`. `workItemTypes.parent` is `["Product Backlog Item", "User Story"]`, and the project's process has `Product Backlog Item`.
 - Feature 4120, "Move subscription files into the database", is assigned to you and In Progress, at stage `approved`. `ado.hldId` is 4122, its Breakdown task, with `hldOwned` true. Breakdown v1 was approved by Jane Doe in a comment.
 - The approved breakdown lists three PBIs, in this order:
   1. existing PBI 4100, "Import existing subscription data": assigned to you. It was the original PBI, split in the hourly run: ASDF parked it (Proposed, `size` `phase`, `ado.parentId` 4120), and its HLD task carries one round, the size question, which Jane Doe answered "Q1 A". Workspace `Payments`. Waits for nothing.
@@ -32,5 +32,5 @@
 - 2026-10-20, run 1 (fresh read-only agent): **all 8 lines passed.**
   - It closed 4122 and wrote `hld.closedAt`, marked the assumptions approved, created only 4121 (`add_child`, `Product Backlog Item`, the Feature's area path, iteration and assignee, `pbi-description`, Proposed, no tags), and retitled 4100 with `pbi-scope` appended.
   - It left Sam Lee's 4130 untouched, tracked 4100 and 4121 with `size` `phase`, wrote `ado.pbis` in order, started only 4100, and ended at `awaiting-pbis`.
-  - Follow-up: the run noticed that `do-next`'s "no ADO writes for items not In Progress" read as conflicting with the breakdown updating Proposed PBIs; `do-next` now names that exception, and section 7 says the next pass picks a started PBI up.
+  - Follow-up: the run noticed that `bg-orch`'s "no ADO writes for items not In Progress" read as conflicting with the breakdown updating Proposed PBIs; `bg-orch` now names that exception, and section 7 says the next pass picks a started PBI up.
 - 2026-10-20, run 2, after the final review, with 4100 split in the hourly run as above (fresh read-only agent): **all 8 lines passed.** 4100 was retitled and got `pbi-scope` under the rule for the PBI a Feature was split from, even though its HLD task carries the size round. Everything else matched run 1.

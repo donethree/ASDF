@@ -129,7 +129,7 @@ export function findMcpMatches(mcp: Record<string, unknown>, org: string): strin
 
 export function addMcpEntry(draft: SetupDraft, org: string, name: string): void {
   if (!name.trim() || /[\u0000-\u001f\u007f]/.test(name) || ['__proto__', 'constructor', 'prototype'].includes(name)) fail('ASDF_SETUP_INPUT_INVALID', 'enter a valid MCP server name');
-  const mcp = configRecord(draft.mcp, 'optional MCP draft');
+  const mcp = configRecord(draft.mcp, 'MCP draft');
   const servers = mcpServers(mcp);
   if (Object.hasOwn(servers, name) && !findMcpMatches(mcp, org).includes(name)) {
     fail('ASDF_SETUP_MCP_COLLISION', `${name} is already used by another server`);
@@ -150,12 +150,53 @@ export function addMcpEntry(draft: SetupDraft, org: string, name: string): void 
   if (configured) configured.mcpServer = name;
 }
 
+function prepareRequiredMcp(loaded: LoadedSetup): void {
+  const mcp = loadSetupMcp(loaded);
+  const servers = mcpServers(mcp);
+  const requiredToolsets = ['wit', 'repos', 'pipelines'];
+  for (const org of loaded.draft.config.orgs) {
+    const name = `asdf-ado-${org.org}`;
+    if (Object.hasOwn(servers, name)) {
+      const server = configRecord(servers[name], name);
+      if (typeof server.url !== 'string' || !findMcpMatches(mcp, org.org).includes(name)
+        || (server.type !== undefined && server.type !== 'http')) {
+        fail('ASDF_SETUP_MCP_COLLISION', `${name} is already used by another server; resolve that name before saving`);
+      }
+      const headers = configRecord(server.headers ?? {}, `${name} headers`);
+      const header = (key: string) => {
+        const keys = Object.keys(headers).filter(k => k.toLowerCase() === key.toLowerCase());
+        if (keys.length > 1) fail('ASDF_SETUP_INVALID', `${name} has duplicate ${key} headers`);
+        return keys.length ? headers[keys[0]] : undefined;
+      };
+      const toolsets = header('X-MCP-Toolsets');
+      const selectedToolsets = typeof toolsets === 'string' ? toolsets.split(',').map(s => s.trim().toLowerCase()) : [];
+      if (server.disabled === true || server.enabled === false
+        || (server.tools !== undefined && (!Array.isArray(server.tools) || !server.tools.includes('*')))
+        || String(header('X-MCP-Readonly')).toLowerCase() === 'true'
+        || header('X-MCP-Tools') !== undefined
+        || (toolsets !== undefined && !selectedToolsets.includes('all')
+          && !requiredToolsets.every(t => selectedToolsets.includes(t)))) {
+        fail('ASDF_SETUP_MCP_RESTRICTED', `${name} has explicit tool/enablement restrictions; review them manually before saving. Setup will not remove them`);
+      }
+    }
+    addMcpEntry(loaded.draft, org.org, name);
+    const server = configRecord(servers[name], name);
+    const headers = configRecord(server.headers, `${name} headers`);
+    if (!Object.keys(headers).some(k => k.toLowerCase() === 'x-mcp-toolsets')) {
+      headers['X-MCP-Toolsets'] = requiredToolsets.join(',');
+    }
+    server.type = 'http';
+    server.tools ??= ['*'];
+  }
+}
+
 export function prepareSetupSave(input: LoadedSetup): SetupWritePlan {
   const loaded = structuredClone(input);
   const draft = loaded.draft;
   draft.contextPath = validateContextPath(draft.contextPath);
   const target = snapshot(loaded, contextFile(draft.contextPath));
   draft.config = prepareConfig(draft.config);
+  prepareRequiredMcp(loaded);
   const settings = snapshot(loaded, loaded.paths.settingsFile);
   const writes: PlannedWrite[] = [];
   const plan = (s: FileSnapshot, value: unknown) => {

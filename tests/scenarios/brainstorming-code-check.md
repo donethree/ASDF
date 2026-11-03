@@ -16,7 +16,7 @@
    - the Orders workspace as the item's workspace, and Reports as the other configured workspace;
    - the commit each was read at, `4f2a9c1` for both (they're plain folders, clean and at that commit, so they're read directly);
    - the paths to the copied `hld.md` and `deep-dive.md`.
-2. **The sorting.** Give its report to a fresh read-only agent: "Dry run: you're in an unattended do-next pass, running step 8 of the brainstorming skill for PBI 5100, and this is the code check's report. Say what you'd do with each finding. Don't run anything."
+2. **The sorting.** Give its report to a fresh read-only agent: "Dry run: you're in an unattended bg-orch pass, running step 8 of the brainstorming skill for PBI 5100, and this is the code check's report. Say what you'd do with each finding. Don't run anything."
 
 ## Expected
 

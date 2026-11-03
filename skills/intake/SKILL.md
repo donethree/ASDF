@@ -39,7 +39,7 @@ Every piece of ASDF work hangs off an Azure DevOps work item. This skill finds t
 
 For direct manually initiated work, preserve `origin: live`, a generated
 threadId and the root item ID through subsequent skills. This is distinct
-from do-next (even manually invoked inline do-next), persistent workers and
+from bg-orch (even manually invoked inline bg-orch), persistent workers and
 subagents. At a design/PR wait, use `asdf:live-continuation` to register a
 same-conversation check starting at five minutes, increasing by five up to
 sixty, when supported; never leave the session
@@ -51,7 +51,7 @@ workflow or a new owner borrowed from chat history.
 
 A Feature goes straight to asdf:feature-breakdown; never ask whether it should be a Feature.
 
-- If its state category isn't `InProgress` or `Resolved`, move it to the first `InProgress` state through `asdf:ado-work-items` without asking, and say so. `do-next` only keeps working on In Progress items.
+- If its state category isn't `InProgress` or `Resolved`, move it to the first `InProgress` state through `asdf:ado-work-items` without asking, and say so. `bg-orch` only keeps working on In Progress items.
 - Then run `asdf.ts stage -Id <id> -Stage new` and `asdf:feature-breakdown` in this session. The breakdown works out whether it needs more than one PBI.
 
 ## A PBI or User Story
@@ -63,12 +63,12 @@ A Feature goes straight to asdf:feature-breakdown; never ask whether it should b
    - **Large:** explain why, listing the steps you see. Then ask with `ask_user`, one field with two options: `feature`, "Make it a Feature, with a PBI per step (recommended)", or `one`, "Keep it as one PBI and one PR".
      - `feature`: follow "Making a PBI into a Feature" in `asdf:feature-breakdown`, in this session, and stop here. The PBI waits until the breakdown is approved.
      - `one`: write `{"size":"one"}` with `item-set`, and add a `D` row to `decisions.md`, "Keep it as one PBI", decided by <name> (session). The HLD's decisions table carries it to ADO.
-2. If its state category isn't `InProgress` or `Resolved`, ask whether to move it to In Progress. Explain that `do-next` only keeps working on In Progress items. On a yes, move it through `asdf:ado-work-items`.
+2. If its state category isn't `InProgress` or `Resolved`, ask whether to move it to In Progress. Explain that `bg-orch` only keeps working on In Progress items. On a yes, move it through `asdf:ado-work-items`.
 3. Then run `asdf.ts stage -Id <id> -Stage new` and `asdf:brainstorming`.
 
 ## Task routing
 
-Used for a Task or Bug, both here and by `do-next` for Tasks in stage `new`.
+Used for a Task or Bug, both here and by `bg-orch` for Tasks in stage `new`.
 
 First re-read the Task's assignee and parent. If the Task isn't assigned to you, pause it locally and stop without ADO writes. Design tasks (HLD/Design/Breakdown title or tag) are never independent work. An unstarted Task under a tracked PBI that is neither paused nor done belongs to that parent's workflow (`asdf:ado-work-items`). Preserve an already-started standalone Task and resume its current stage instead of rerouting or abandoning its PR. Check roles and parents within the item's org.
 

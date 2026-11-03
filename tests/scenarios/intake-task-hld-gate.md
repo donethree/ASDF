@@ -2,7 +2,7 @@
 
 ## Setup
 
-- `do-next` pass, unattended. Task 702 "Add retry to upload" (kind task) is in stage `new` and assigned to you. Its parent is PBI 700, owned by Bob Lee.
+- `bg-orch` pass, unattended. Task 702 "Add retry to upload" (kind task) is in stage `new` and assigned to you. Its parent is PBI 700, owned by Bob Lee.
 - PBI 700 has an HLD task, 701 ("HLD: Uploads", tagged `asdf; asdf-hld`, assigned to Bob Lee).
   - 701 is In Progress (InProgress category). Its HLD v2 is still waiting for Bob's approval.
   - Its latest attachment is `hld.v2.md`, which already covers retries.

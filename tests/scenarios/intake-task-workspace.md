@@ -2,7 +2,7 @@
 
 ## Setup
 
-- `do-next` pass, unattended. Org `contoso`, MCP server `ado-contoso`.
+- `bg-orch` pass, unattended. Org `contoso`, MCP server `ado-contoso`.
 - `asdf.ts config` lists two workspaces:
   - `C:\src\Payments`, holding repo `Payments` in `contoso/Commerce`;
   - `C:\src\Inventory`, holding repo `Inventory` in `contoso/Commerce`.

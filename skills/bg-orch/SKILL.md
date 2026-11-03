@@ -1,16 +1,19 @@
 ---
-name: do-next
-description: Use when asked to make progress on ASDF work or run do-next, or when invoked by an automation - one pass through every tracked work item, most-finished work first
+name: bg-orch
+description: Use when asked to run the background orchestrator, make progress on intake-tracked ASDF work, or run bg-orch in a recurring automation
 ---
 
-# do-next: one pass
+# bg-orch: background orchestrator
 
-One pass moves every ASDF item as far forward as it can go right now, then reports what happened. An automation in the Copilot app runs it hourly; a person can run it by hand. It behaves the same either way.
+One pass advances intake-tracked work and its verified descendants, then reports
+what happened. It never enrolls unrelated assigned work. A person must put a
+new root through `asdf:intake` before a recurring pass can work on it.
+Existing local records are grandfathered; no new intake marker is required.
 
 ## Execution mode
 
-Bare `/asdf:do-next` or the single argument `inline` keeps work in this
-conversation. `/asdf:do-next sessions` uses one persistent CLI conversation
+Bare `/asdf:bg-orch` or the single argument `inline` keeps work in this
+conversation. `/asdf:bg-orch sessions` uses one persistent CLI conversation
 per independently managed item, whether scheduled from the app or CLI.
 Reject unknown or conflicting arguments. Do not infer mode from the host.
 If this is already an item worker (`ASDF_WORKER_REQUEST` was supplied),
@@ -20,7 +23,7 @@ The rules for a pass:
 
 - **Most-finished work first.** Fixing PR feedback beats merging, which beats implementing, which beats designing.
 - **Do not stop after one item.** Keep going until the queue has nothing left that can move.
-- **Never call `ask_user` in `do-next`.** Questions go to ADO as question rounds.
+- **Never call `ask_user` in `bg-orch`.** Questions go to ADO as question rounds.
 
 ## Compact decision log
 
@@ -43,7 +46,7 @@ Only the coordinator emits these events, after observing the stated condition:
 
 | Action | When / fields |
 |---|---|
-| `item-tracked` | Successful tracking decision for a new candidate: Id, Org, Project. Say tracking was ensured, not that this pass necessarily created it in a race. |
+| `item-tracked` | Tracking ensured for a verified descendant of a tracked item: Id, Org, Project. Do not claim this pass created it in a race. |
 | `state-changed` | Sync actually changed state: Id, Org, Project, From, To and brief Reason. No unchanged-signal entries. |
 | `item-selected` | Candidate selected for a work attempt: Id, Org, Project, Stage and Reason. Selection does not claim successful execution. |
 | `item-deferred` | A selected attempt was deferred, or an unresolved ownership problem needs attention: Id and Reason. Routine already-busy scan results are not individually logged. |
@@ -77,12 +80,18 @@ logging never makes a lost/invalid worker request safe to continue.
 ## 1. Preconditions
 
 - Run `asdf.ts settings`. If settings or config are missing/invalid, report the actual error and tell the user to run `node "<plugin root>\asdf.js" --init` manually, then stop. Do not invoke a setup skill or launch the wizard unattended.
-- Run `asdf.ts config` to get the orgs, projects, optional MCP hints and work item types.
+- Run `asdf.ts config` to get configured orgs, optional MCP hints and work item types.
 - Make one owner id for this pass with `node -e "console.log(crypto.randomUUID())"`, and use it for every lock.
+- Run `asdf.ts items` before discovering MCP tools. These local records are
+  the pass's roots. If empty, emit the single
+  `pass-finished -Outcome no-actionable-work` event, report no tracked work
+  and stop without ADO access, discovery queries or creating items. New roots
+  need `asdf:intake`.
 
 ## 2. Which orgs can be reached
 
-For each org needed by this pass, follow `asdf:ado-work-items` runtime discovery
+For each org represented by the roots or verified descendants, follow
+`asdf:ado-work-items` runtime tool discovery
 for required work-item and WIQL reads. A saved mcpServer is optional; discover
 local/remote host tools by capability and verify the target org through the
 required reads. Missing or stale hints do not skip an org when another available
@@ -101,18 +110,40 @@ that org by schema (for example `wit_query_by_wiql`, or `wit_query` with a `wiql
 action); do not require those exact names or a specific prefix. The org's items
 stay untouched if no candidate supports the query.
 
-## 3. Sync
+## 3. Scope and sync
 
-Use `asdf:ado-work-items` for per-source discovery and independent tracked-ID
-assignment batches. A repository registration is not a watch source. Complete
-all pages for a source/batch before relying on its membership; errors remain
-unknown, not empty. Never broaden a failed team's scope.
+Use `asdf:ado-work-items` "Read descendants of tracked work" and "Refresh
+assignment for tracked work". Follow only downward hierarchy child relations
+from local roots; keep a visited set keyed by org/project/ID. Ancestor reads
+for signals and Related/PR links do not add roots or authorize sibling scans.
+Saved project/team watches do not expand this pass. Do not call
+`discovery-sources`, `discovery-query`, "my items" or project-wide assignment
+searches. Complete necessary reads and all assignment pages before snapshot,
+signal, ADO or code writes. A verified new descendant may get its local folder
+through `item-new` first, then must pass the tracked-ID assignment check before
+any further item writes. Errors remain unknown, not empty.
 
-For each reachable org and project needed by a watch source or tracked item:
+For each reachable org/project in this rooted scope:
 
-1. **Find new items.** Union completed discovery results (`asdf:ado-work-items`) and read parents, titles and tags before tracking. Process Features and PBIs before Tasks. Exclude design tasks and managed children using its role and unstarted-Task rules, scoped to the same org; report them as managed by their parent. Preserve already-started standalone child workflows even if their parent is tracked later. For each remaining id that isn't tracked yet, run `asdf.ts item-new` with its org, project, kind (from `workItemTypes`), type, title, and parent if there is one. If item-new returns ASDF_OWN_TASK, skip that id. If item-new returns ASDF_ID_CLASH, skip that id and report it in the summary. Another org's item already uses that id, so ASDF can't track it. Include newly tracked IDs in the independent assignment check.
+1. **Include descendants only.** Read current child relations as in the ADO
+   recipe. Before enrollment, recheck each new candidate's type, assignee,
+   state and current parent against its verified downward path. Defer a
+   moved/unverifiable child; do not reparent or enroll it as a new root.
+   Read unassigned child containers only to reach eligible descendants;
+   never mutate or enroll someone else's item. Skip new Completed/Removed
+   items; already-tracked terminal work retains its normal close-out.
+   Process Features and PBIs before Tasks. Exclude design tasks and managed
+   children using the role and unstarted-Task rules, scoped to the same org;
+   report them as managed by their parent. Preserve already-started standalone
+   child workflows even if their parent is tracked later. For each remaining
+   assigned-to-you descendant not already tracked, run `asdf.ts item-new`
+   with its org, project, kind (from `workItemTypes`), type, title and parent.
+   If item-new returns ASDF_OWN_TASK, skip that id.
+   If item-new returns ASDF_ID_CLASH, skip that id and report it in the summary.
+   Include newly tracked IDs in the independent assignment check. New unrelated
+   Features, PBIs and Tasks remain untouched until intake.
 2. **Lock before refreshing.** Only IDs with a complete assignment batch and successful necessary reads can be refreshed. For each, acquire `asdf.ts lock -Id <id> -Owner <pass owner>` before writing its snapshot or signals file. If acquisition fails, skip all its files and writes. Re-read state after acquiring. Refresh `item.md` while holding the lock. Items that aren't In Progress get no ADO writes, except the approved breakdown's permitted writes to PBIs still assigned to you.
-3. **Apply signals.** For every item of the org that isn't `done`:
+3. **Apply signals.** For every successfully read, in-scope tracked item that isn't `done`:
    - Build its signals file with the recipe in `asdf:ado-work-items`, including only what its stage needs:
 
      | Section | Include it for |
@@ -134,6 +165,10 @@ For each reachable org and project needed by a watch source or tracked item:
 Exclude items whose necessary refresh/assignment reads failed or remain
 incomplete this pass, regardless of their previously stored actionable stage.
 Do not run a worker on stale state merely because the local queue lists it.
+Dispatch only roots and verified descendants whose reads succeeded this pass.
+Re-read local items after stage work admits descendants (for example an
+approved Feature's PBIs); scope-check and sync new entries before dispatch.
+An unrelated item added concurrently waits until the next pass.
 
 ### Persistent mode (`sessions`)
 
@@ -202,3 +237,4 @@ End the pass with a short summary covering:
 - Never stop after one item while the queue still has work.
 - Never work on, or unlock, an item whose lock you don't hold.
 - Never use the `az` CLI or REST calls for ADO.
+- Never discover or enroll unrelated new assignments; require intake for roots.

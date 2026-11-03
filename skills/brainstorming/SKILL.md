@@ -204,7 +204,7 @@ Do not use a blocking ask_user form just to await an approval already requested.
 Feedback/approval arriving after an external wait uses live-continuation's
 version-bound receipt path rather than directly applying the old chat snapshot.
 
-## 6. Unattended run (`do-next`)
+## 6. Unattended run (`bg-orch`)
 
 - Post the `question-round` comment on the HLD task. Post one comment per round.
 - Write `{"hld":{"roundPostedAt":"<utc now>"}}` to `<item>\patch.json` and run `asdf.ts item-set -Id <id> -File <item>\patch.json`.

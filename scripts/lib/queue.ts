@@ -1,4 +1,4 @@
-// The do-next work queue: actionable items, most-finished work first.
+// The bg-orch work queue: actionable items, most-finished work first.
 import { STAGE_PRIORITY, getItems, itemPath, managedChildReason } from './items.ts';
 import { isLocked } from './lock.ts';
 import { readWorkerClaim, workerNeedsRecovery } from './workerLease.ts';

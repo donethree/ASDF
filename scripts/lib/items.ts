@@ -11,7 +11,7 @@ export const STAGES = [
   'implementing', 'self-review', 'pr-open', 'pr-feedback', 'pr-ready', 'merging', 'merged', 'done', 'blocked', 'paused',
 ] as const;
 
-// do-next queue priority (lower runs first); stages without an entry are waiting on someone else.
+// bg-orch queue priority (lower runs first); stages without an entry are waiting on someone else.
 export const STAGE_PRIORITY: Readonly<Record<string, number>> = {
   'pr-feedback': 1, 'pr-ready': 2, 'merged': 2, 'pbis-done': 2, 'implementing': 3, 'self-review': 3,
   'approved': 4, 'answers-received': 5, 'new': 6,

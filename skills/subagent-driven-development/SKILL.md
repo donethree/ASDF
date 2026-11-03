@@ -44,7 +44,7 @@ preflight, ownership, approval or dependency blockers.
 - **Dependencies.** Pause and ask before adding a dependency the HLD did not list. That's a blocker (the `blocker` template), never a ruling.
 - **Workspace and ledger.** The workspace is the item's `sdd\` folder in the asdf-context, never the repo.
   - Use the CLI: `asdf.ts task-brief`, `asdf.ts review-package`, and `asdf.ts ledger-add -Id <id> -Text "..."`. The ledger is `<item>\sdd\ledger.md`.
-  - A later `do-next` pass resumes from the ledger. A task with a `Task <N>: complete` or `Task <N> done` line is finished.
+  - A later `bg-orch` pass resumes from the ledger. A task with a `Task <N>: complete` or `Task <N> done` line is finished.
 - **The code checkout** is the item's verified `codeRoot`, set up by `asdf:using-git-worktrees` following the repo's README: a linked worktree, the configured checkout, or an existing branch it adopted. Commit there. Pushing happens only in `asdf:finishing-a-development-branch`.
 - **Preflight is a gate.** On every entry and resume, before dispatching any implementation, run `asdf:using-git-worktrees`: verify the recorded checkout or set one up, and reuse its recorded baseline when checkout and branch are unchanged. Continue on `recorded: true`; a red baseline is known failures listed in `<item>\known-failures.md`, not a blocker. Only failures outside that list block a task: `task-done -KnownFailure "<which known failures>"` records a task whose test log shows nothing else.
 - **Persistent entry.** When `ASDF_WORKER_REQUEST` is present, these task/review

@@ -113,7 +113,7 @@ describe('stage transitions', () => {
     { name: 'a reply does not unblock without a recorded blocker comment time', item: itemAt('blocked', 'parent', { blocker: { commentAt: null } }), signals: { workItem: activeWorkItem, blocker: { comments: [comment('2026-01-05T11:00:00Z', 'old note')] } }, to: null },
     { name: 'a done item never changes', item: itemAt('done'), signals: { workItem: workItem('Removed', false) }, to: null },
 
-    // Flags that do-next writes by hand, as text or numbers, mean what true and false mean
+    // Flags that bg-orch writes by hand, as text or numbers, mean what true and false mean
     { name: 'assignedToMe written as the text "false" pauses the item', item: itemAt('implementing'), signals: { workItem: { stateCategory: 'InProgress', assignedToMe: 'false' } }, to: 'paused' },
     { name: 'assignedToMe written as 0 pauses the item', item: itemAt('implementing'), signals: { workItem: { stateCategory: 'InProgress', assignedToMe: 0 } }, to: 'paused' },
     { name: 'a thread ASDF answered, marked with the text "true", waits', item: itemAt('pr-open'), signals: { workItem: activeWorkItem, pr: openPr({ threads: [thread('active', 'true')] }) }, to: null },

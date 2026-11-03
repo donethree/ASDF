@@ -1,7 +1,7 @@
-# Scenario: manual setup and scoped discovery
+# Scenario: required manual MCP setup and rooted runtime reads
 
 Read-only simulation; use no real ADO calls, user prompts, settings writes or
-model CLI launches. Apply intake, do-next and ado-work-items.
+model CLI launches. Apply intake, bg-orch and ado-work-items.
 
 ## Inputs
 
@@ -9,7 +9,8 @@ model CLI launches. Apply intake, do-next and ado-work-items.
 - Tracked PBI 42 is assigned to the current user but outside this team's areas.
 - Tracked PBI 43 is in another project in the same configured org, explicitly
   intaken earlier; that project has no discovery watch.
-- The team source rejects @TeamAreas. Another source returns exactly 200 IDs.
+- Saved team watches are not background discovery sources. One bounded
+  tracked-ID assignment query returns exactly 200 IDs.
 - Separately, interactive intake gets access denied and another invocation
   has no saved configuration.
 - Valid config has no mcpServer for contoso. A local host server under another
@@ -19,10 +20,13 @@ model CLI launches. Apply intake, do-next and ado-work-items.
 
 ## Expected actions
 
-1. Discover only explicit source scopes with generated queries and top 200.
+1. Manual init stages dedicated remote entries per org with the workflow
+   toolsets and WIQL Insiders header, preserving local entries until final
+   Save. It makes no MCP/ADO calls or login attempts. Explicit restrictions
+   and name collisions are reported, not silently removed.
 2. A full page advances the ID cursor and queries again; do not call it complete.
-3. An unsupported team source is reported, never widened to the project or
-   treated as an empty assignment inventory.
+3. bg-orch reads only tracked roots and verified descendants. It does not run
+   team/project discovery queries, even when watches are configured.
 4. Refresh assignment for tracked 42 and 43 through bounded tracked-ID queries
    independent of area/team/type/tag/completed filters, including unwatched
    projects. A successful assignment result keeps their current ownership.
@@ -36,6 +40,8 @@ model CLI launches. Apply intake, do-next and ado-work-items.
    manually. No init skill, wizard launch by agent or special first-run check.
 8. Existing parent/task roles, In Progress gating, approval and session ownership
    rules are unchanged.
-9. No extra server setup is required when local/shared tools work. PR routing
+9. At runtime, no re-init is forced when older configs' local/shared tools work.
+   Init's remote preparation does not prove a running host has authenticated
+   or loaded it; rediscover schemas as needed. PR routing
    uses repo.org/project independently. Failed/uncertain writes are reconciled
    with reads before retry, never replayed through another candidate.

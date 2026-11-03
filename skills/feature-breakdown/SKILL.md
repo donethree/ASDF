@@ -26,7 +26,7 @@ and consume the revision or confirmed forwarding before publication/delegation.
 | `pbis-done`: every PBI is finished | 8 |
 | `intake` or `asdf:brainstorming` is making a PBI into a Feature | 10 |
 
-A Feature at `awaiting-pbis` needs nothing from this skill. Each `do-next` pass lists its PBIs that are ready for a person to start.
+A Feature at `awaiting-pbis` needs nothing from this skill. Each `bg-orch` pass lists its PBIs that are ready for a person to start.
 
 ## 1. Set up
 
@@ -112,7 +112,7 @@ explicit comment/session approval is required, not a Done shortcut.
 4. **Update the reused PBIs.** Re-read assignment first; leave any PBI no longer assigned to you untouched. Within that owned set, the PBI this Feature was split from gets its title and scope from the breakdown. You can tell it by its `size` (`phase`) and its `ado.parentId` (this Feature), both set in section 10. Its only round was the size question, so it counts as not started. Do the same for each other existing child PBI the breakdown reuses, if it hasn't started (in the `Proposed` category, with no HLD round posted). That means setting its title from the breakdown and appending `pbi-scope`. Never edit or remove a PBI that has started or is assigned to someone else.
 5. **Track them.** For each of the Feature's PBIs assigned to you, run `asdf.ts item-new -Org <org> -Project <project> -Id <pbi id> -Kind parent -Type "<type>" -Title "<title>" -ParentId <feature id>`, then write `{"size":"phase"}` with `item-set`.
 6. **Record them on the Feature** with `item-set`, in the breakdown's order: `{"ado":{"pbis":[{"id":<id>,"waitsFor":[<ids>]}]}}`, one entry per PBI.
-7. **Start the PBIs that wait for nothing:** re-read each PBI and move it to the first `InProgress` state only if it is still assigned to you and still Proposed. Leave other people's and already-started PBIs untouched. Unattended entry leaves pickup to do-next. Never start a PBI that waits for another; a person starts it.
+7. **Start the PBIs that wait for nothing:** re-read each PBI and move it to the first `InProgress` state only if it is still assigned to you and still Proposed. Leave other people's and already-started PBIs untouched. Unattended entry leaves pickup to bg-orch. Never start a PBI that waits for another; a person starts it.
 8. Run `asdf.ts stage -Id <feature id> -Stage awaiting-pbis`.
 9. In live mode return to live-continuation: refresh all child identities/states,
    select the next ready child with live-child, release the Feature's operation,
@@ -153,7 +153,7 @@ Someone moved the Breakdown task out of `Completed`, so the Feature is back at `
 3. **Park the PBI.** Move it to the first `Proposed` state, so nothing works on it as one piece. Write `{"size":"phase","ado":{"parentId":<feature id>}}` with `item-set`, and run `asdf.ts stage -Id <pbi id> -Stage tracked`. It starts again once the breakdown is approved (section 7).
 4. **Track the Feature:** `asdf.ts item-new -Org <org> -Project <project> -Id <feature id> -Kind feature -Type "<type>" -Title "<title>"`, and write its `item.md` snapshot as `intake` does.
    - In a live session, run `asdf.ts stage -Id <feature id> -Stage new` and carry on with section 1 on the Feature, asking its questions with `ask_user`.
-   - Unattended, stop here. The next `do-next` pass picks the Feature up.
+   - Unattended, stop here. The next `bg-orch` pass picks the Feature up.
 
 ## Never
 
@@ -161,4 +161,4 @@ Someone moved the Breakdown task out of `Completed`, so the Feature is back at `
 - Never create a Feature without the person's OK, or a PBI the approved breakdown doesn't list.
 - Never start a PBI that waits for another.
 - Never edit or remove a PBI that has started or is assigned to someone else.
-- Never call `ask_user` in a `do-next` pass.
+- Never call `ask_user` in a `bg-orch` pass.

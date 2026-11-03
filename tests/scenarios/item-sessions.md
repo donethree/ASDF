@@ -5,7 +5,7 @@ calls, launch a model session or change user settings while running this scenari
 
 ## Inputs
 
-- Invocation: `/asdf:do-next sessions`, from either a desktop or CLI schedule.
+- Invocation: `/asdf:bg-orch sessions`, from either a desktop or CLI schedule.
 - Completed sync; queue includes PBI 42 `pr-feedback`, PBI 43 `approved`,
   Feature 50 `approved`. PBI 44 has another worker; HLD Task 45 belongs to it.
 - Runner 42 reports `failed`, `ASDF_WORKER_MCP_UNAVAILABLE`.
@@ -15,9 +15,9 @@ calls, launch a model session or change user settings while running this scenari
 
 ## Prompt
 
-Apply do-next, work-item and using-asdf. Show the actual dispatch, ownership,
+Apply bg-orch, work-item and using-asdf. Show the actual dispatch, ownership,
 failure handling and inspection references, then the resumed worker actions.
-Separately explain bare do-next, an unknown mode, a disabled required skill,
+Separately explain bare bg-orch, an unknown mode, a disabled required skill,
 and a status-export failure after real workflow progress.
 
 ## Expected
@@ -35,6 +35,6 @@ and a status-export failure after real workflow progress.
    worker-fail, never both, never unlocks the governing runner-owned item.
 8. Summary includes session ID, status/transcript paths and freshness; viewing
    files does not intervene in automation or imply a native desktop session.
-9. Bare do-next stays inline; unknown/conflicting modes are reported.
+9. Bare bg-orch stays inline; unknown/conflicting modes are reported.
 10. Disabled skills/permissions are not enabled or bypassed. Observation errors
     do not undo or replay already-applied business changes.

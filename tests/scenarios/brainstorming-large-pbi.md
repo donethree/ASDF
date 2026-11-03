@@ -2,7 +2,7 @@
 
 ## Setup
 
-- `do-next` pass, unattended. Org `contoso`, MCP server `ado-contoso`, project `Commerce`.
+- `bg-orch` pass, unattended. Org `contoso`, MCP server `ado-contoso`, project `Commerce`.
 - `asdf.ts config` lists the workspaces `C:\src\Payments` (repo `Payments`) and `C:\src\Inventory` (repo `Inventory`), both in `contoso/Commerce`. `workItemTypes.feature` is `["Feature"]`.
 - PBI 4400, "Move subscription files into the database", is assigned to you and In Progress, at stage `new`. Its `size` is empty, `hld.version` is 0, and no round has been posted. Its description: "Today the Payments service reads subscriptions from JSON files. Import the existing files into new SQL tables, then switch every reader in Payments to the tables."
 - PBI 4121, "Move readers to the SQL tables", is In Progress at stage `new`, with `size` `phase`. Its parent is Feature 4120, which ASDF tracks at `awaiting-pbis`, with breakdown v1 approved.

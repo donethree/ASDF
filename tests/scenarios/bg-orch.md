@@ -1,8 +1,8 @@
-# Scenario: do-next, a pass with a lost lock and an unreachable org
+# Scenario: bg-orch, a pass with a lost lock and an unreachable org
 
 ## Setup
 
-- Unattended automation run. Config orgs: `contoso` (`ado-contoso`, all its tools available, including `ado-contoso-wit_query_by_wiql`) and `contoso2` (`ado-contoso2`). This session has no `ado-contoso2-*` tools at all.
+- Unattended automation run. Both orgs have intake-tracked items. Config orgs: `contoso` (`ado-contoso`, all its tools available, including `ado-contoso-wit_query_by_wiql`) and `contoso2` (`ado-contoso2`). This session has no `ado-contoso2-*` tools at all.
 - After sync and signals, `asdf.ts queue` returns, in order:
   - 31 "Fix export encoding" (`pr-feedback`)
   - 32 "Add CSV export" (`merged`)
@@ -12,7 +12,7 @@
 
 ## Prompt
 
-"Dry run: using the do-next skill (and ado-work-items for conventions), list in order every CLI command you'd run and every skill you'd invoke for this pass, then the summary you'd print. Don't execute anything."
+"Dry run: using the bg-orch skill (and ado-work-items for conventions), list in order every CLI command you'd run and every skill you'd invoke for this pass, then the summary you'd print. Don't execute anything."
 
 ## Expected
 

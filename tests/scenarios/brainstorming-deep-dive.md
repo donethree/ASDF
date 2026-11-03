@@ -2,7 +2,7 @@
 
 ## Setup
 
-- `do-next` pass, unattended. Org `contoso`, MCP server `ado-contoso`, project `Commerce`. `maxQuestionsPerRound` is 4.
+- `bg-orch` pass, unattended. Org `contoso`, MCP server `ado-contoso`, project `Commerce`. `maxQuestionsPerRound` is 4.
 - The fixture `tests\scenarios\fixtures\orders-export` holds two workspaces, `Orders` and `Reports`. Copy only those two folders outside the repo for the run. The agent must never see this file, or the fixture's `item-5100-v1` folder, which holds a draft HLD for the same PBI.
 - `asdf.ts config` lists both workspaces, in `contoso/Commerce`:
   - `<copy>\Orders`, repo `Orders`;
@@ -16,7 +16,7 @@
 
 ## Prompt
 
-"Dry run: you're in an unattended do-next pass, and PBI 5100 is at stage `new`. Using the brainstorming skill (and ado-work-items for conventions), do what the skill says, up to posting the first question round (or requesting approval, if nothing is open). You may read the workspaces' code, read-only. Show every file you'd write in the item folder with its full content, the comment you'd post, and the CLI commands. Don't run CLI or ADO calls, and don't write files."
+"Dry run: you're in an unattended bg-orch pass, and PBI 5100 is at stage `new`. Using the brainstorming skill (and ado-work-items for conventions), do what the skill says, up to posting the first question round (or requesting approval, if nothing is open). You may read the workspaces' code, read-only. Show every file you'd write in the item folder with its full content, the comment you'd post, and the CLI commands. Don't run CLI or ADO calls, and don't write files."
 
 ## Expected
 

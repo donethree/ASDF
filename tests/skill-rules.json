@@ -104,7 +104,7 @@
     "Use the returned path, not a name-only index.",
     "Push only repo.branch."
   ],
-  "do-next": [
+  "bg-orch": [
     "Most-finished work first.",
     "Do not stop after one item.",
     "Skip any org whose Azure DevOps MCP server is unavailable, and report it.",

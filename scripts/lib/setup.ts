@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { checkConfig, validateContextPath } from './settings.ts';
 import { parseOrganization, parseProject, parseWatchSource, prepareRepository, sameSource } from './setupInputs.ts';
-import { addMcpEntry, findMcpMatches, loadSetup, loadSetupMcp, prepareSetupSave, saveSetup, selectContext, sameSetupPath, type LoadedSetup, type SetupPaths, type SetupWritePlan } from './setupState.ts';
+import { loadSetup, prepareSetupSave, saveSetup, selectContext, sameSetupPath, type LoadedSetup, type SetupPaths, type SetupWritePlan } from './setupState.ts';
 import { EXAMPLES, SetupBack, SetupCancelled, type SetupIO } from './setupPrompt.ts';
 import { configRecord, configText, type OrgConfig, type ProjectIdentity, type ProjectConfig, type WatchSource } from './watchScopes.ts';
 import { AsdfError, fail, same } from './util.ts';
@@ -243,35 +243,12 @@ export async function runSetup(io: SetupIO, paths?: SetupPaths): Promise<SetupRe
     }, config().userName);
   };
   const mcp = async () => {
-    io.write('\nOptional MCP configuration. ASDF discovers available ADO tools at runtime, including local servers.\nSkip this if your host already provides ADO access. No server, login or connectivity check will run.\n');
-    if (!await yes('Configure local MCP entries in this wizard?')) return;
-    const entries = loadSetupMcp(loaded);
+    loaded = prepareSetupSave(loaded).loaded;
+    io.write('\nRequired ASDF remote ADO entries (saved only at final Save).\nExisting local servers are preserved. No server, login or connectivity check will run.\n');
+    const servers = configRecord(loaded.draft.mcp?.mcpServers, 'mcpServers');
     for (const org of config().orgs) {
-      const matches = findMcpMatches(entries, org.org);
-      let name: string;
-      if (!matches.length) {
-        name = await validated(`MCP server entry name for ${org.org}:`, plain, `ado-${org.org}`);
-        io.write(`Proposed entry: ${name}\n${JSON.stringify({ type: 'http', url: `https://mcp.dev.azure.com/${encodeURIComponent(org.org)}`, headers: { 'X-MCP-Insiders': 'true' }, tools: ['*'] }, null, 2)}\n`);
-        if (!await yes('Add this local MCP entry when you save?')) { io.write('Entry not added; runtime discovery will be used.\n'); continue; }
-      } else if (matches.length === 1) {
-        name = matches[0];
-        io.write(`Using existing ${name} for ${org.org}.\n`);
-      } else {
-        io.write(`Choose the existing MCP server for ${org.org}:\n`);
-        const index = await select(matches);
-        if (index < 0) continue;
-        name = matches[index];
-      }
-      const servers = configRecord(entries.mcpServers, 'mcpServers');
-      if (Object.hasOwn(servers, name)) {
-        const server = configRecord(servers[name], name);
-        if (typeof server.url === 'string') {
-          const headers = configRecord(server.headers ?? {}, 'headers');
-          const key = Object.keys(headers).find(k => k.toLowerCase() === 'x-mcp-insiders');
-          if ((!key || headers[key] !== 'true') && !await yes(`Set X-MCP-Insiders: true on ${name} at Save? Other headers will be preserved.`)) continue;
-        }
-      }
-      addMcpEntry(loaded.draft, org.org, name);
+      const name = configText(org.mcpServer, 'MCP server name');
+      io.write(`${name}: ${JSON.stringify(servers[name], null, 2)}\n`);
     }
   };
   const worktrees = async () => {
@@ -305,6 +282,7 @@ export async function runSetup(io: SetupIO, paths?: SetupPaths): Promise<SetupRe
         io.write(`Draft is not ready to save: ${error.message}\n`);
       }
       io.write(`\nReview draft\nContext: ${loaded.draft.contextPath || '(required)'}\nWorktree parent: ${config().worktreeRoot || '(required)'}\nUser: ${config().userName}\n`);
+      io.write('Required remote ADO preparation: dedicated asdf-ado-<org> entries; wit/repos/pipelines toolsets; X-MCP-Insiders: true for WIQL. Existing local MCP entries are unchanged.\n');
       for (const org of config().orgs) {
         io.write(`Organization: ${org.org}; MCP: runtime discovery${org.mcpServer ? ` (hint: ${org.mcpServer})` : ''}\n`);
         for (const project of org.projects) io.write(`  Project: ${project.project}; watches: ${project.watchScopes.length}\n`);
@@ -312,13 +290,13 @@ export async function runSetup(io: SetupIO, paths?: SetupPaths): Promise<SetupRe
       for (const workspace of config().workspaces) io.write(`Repository: ${workspace.org}/${workspace.project}/${workspace.repo} - ${workspace.path}\n`);
       for (const watch of watches()) io.write(`Watch: ${watchLabel(watch)}\n`);
       io.write(`Types: ${JSON.stringify(config().workItemTypes)}\nFiles: ${loaded.paths.settingsFile}; ${join(loaded.draft.contextPath, 'asdf.config.json')}${loaded.draft.mcp !== null ? `; ${loaded.paths.mcpFile}` : ''}\n`);
-      const choice = await number('1) Save configuration\n2) Context\n3) Organizations\n4) Projects\n5) Repositories\n6) Backlogs/watches\n7) Types\n8) Branch user name\n9) MCP entries (optional)\n10) Worktree parent\n0) Cancel setup', 10);
+      const choice = await number('1) Save configuration\n2) Context\n3) Organizations\n4) Projects\n5) Repositories\n6) Backlogs/watches\n7) Types\n8) Branch user name\n9) MCP entries (required)\n10) Worktree parent\n0) Cancel setup', 10);
       if (choice === 0) throw new SetupCancelled();
       if (choice !== 1) { await section(choice - 2); continue; }
       if (!preview) { io.write('Correct the draft before saving.\n'); continue; }
       try {
         const result = saveSetup(preview);
-        io.write(`\nConfiguration saved.\n${result.written.join('\n') || 'No file changes were needed.'}\nADO was not contacted. Use normal ASDF intake/do-next; failures will identify configuration or MCP access to check.\n`);
+        io.write(`\nConfiguration saved.\n${result.written.join('\n') || 'No file changes were needed.'}\nADO was not contacted. Use normal ASDF intake/bg-orch; failures will identify configuration or MCP access to check.\n`);
         if (result.written.includes(loaded.paths.mcpFile)) io.write('An already-running Copilot session may need its usual MCP reload to see this local change.\n');
         io.write('See the README hourly automation section for scheduling.\n');
         return { status: 'saved', paths: result.written };

@@ -17,7 +17,7 @@ function paths(root: string) {
 }
 
 describe('numbered setup wizard', () => {
-  it('onboards a visualstudio repository without MCP questions or files', async () => {
+  it('prepares dedicated remote ADO tooling during default onboarding', async () => {
     const root = newFolder();
     const context = join(root, 'context');
     const url = 'https://onedrive.visualstudio.com/SharePoint%20Online/_git/SPO.Core';
@@ -29,8 +29,11 @@ describe('numbered setup wizard', () => {
     assert.equal(script.remaining(), 0, script.output());
     const config = JSON.parse(readFileSync(join(context, 'asdf.config.json'), 'utf8'));
     assert.deepEqual(config.workspaces, [{ path: repo, name: 'SPO.Core', org: 'onedrive', project: 'SharePoint Online', repo: 'SPO.Core' }]);
-    assert.equal(config.orgs[0].mcpServer, undefined);
-    assert.equal(existsSync(paths(root).mcpFile), false);
+    assert.equal(config.orgs[0].mcpServer, 'asdf-ado-onedrive');
+    const mcp = JSON.parse(readFileSync(paths(root).mcpFile, 'utf8'));
+    assert.equal(mcp.mcpServers['asdf-ado-onedrive'].url, 'https://mcp.dev.azure.com/onedrive');
+    assert.equal(mcp.mcpServers['asdf-ado-onedrive'].headers['X-MCP-Insiders'], 'true');
+    assert.equal(mcp.mcpServers['asdf-ado-onedrive'].headers['X-MCP-Toolsets'], 'wit,repos,pipelines');
     assert.equal(script.output().includes('MCP server entry name for'), false);
   });
   it('collects a separate short worktree parent during init', async () => {
@@ -183,19 +186,20 @@ describe('numbered setup wizard', () => {
     assert.ok(edit.output().includes(`[${repo}]`));
     assert.equal(JSON.parse(readFileSync(join(context, 'asdf.config.json'), 'utf8')).workspaces[0].path, repo);
   });
-  it('writes MCP configuration only when an optional entry is approved', async () => {
-    for (const action of ['skip', 'add', 'decline']) {
+  it('does not write MCP changes until the final Save is approved', async () => {
+    for (const action of ['save', 'cancel']) {
       const root = newFolder();
       const context = join(root, 'context');
       const repo = newWorkspace(join(root, 'Payments'), 'https://dev.azure.com/contoso/Commerce/_git/Payments');
       const script = scenario([context, SHORT_ROOT, '1', 'contoso', 'n', '1', 'contoso/Commerce', 'n', '1', repo, 'n',
-        '1', 'contoso/Commerce', 'n', 'n', '4', 'jdoe', '9',
-        ...(action === 'skip' ? ['n'] : ['y', '', action === 'add' ? 'y' : 'n']), '1']);
-      assert.equal((await runSetup(script.io, paths(root))).status, 'saved', script.output());
+        '1', 'contoso/Commerce', 'n', 'n', '4', 'jdoe', action === 'save' ? '1' : '0']);
+      assert.equal((await runSetup(script.io, paths(root))).status, action === 'save' ? 'saved' : 'cancelled', script.output());
       assert.equal(script.remaining(), 0, script.output());
-      assert.equal(existsSync(paths(root).mcpFile), action === 'add', action);
-      const saved = JSON.parse(readFileSync(join(context, 'asdf.config.json'), 'utf8'));
-      assert.equal(saved.orgs[0].mcpServer, action === 'add' ? 'ado-contoso' : undefined);
+      assert.equal(existsSync(paths(root).mcpFile), action === 'save', action);
+      if (action === 'save') {
+        const saved = JSON.parse(readFileSync(join(context, 'asdf.config.json'), 'utf8'));
+        assert.equal(saved.orgs[0].mcpServer, 'asdf-ado-contoso');
+      }
     }
   });
 });

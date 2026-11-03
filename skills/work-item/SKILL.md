@@ -1,6 +1,6 @@
 ---
 name: work-item
-description: Use when do-next, a live-continuation controller, or a persistent CLI worker hands off one ASDF item
+description: Use when bg-orch, a live-continuation controller, or a persistent CLI worker hands off one ASDF item
 ---
 
 # Work one ASDF item
@@ -15,7 +15,7 @@ Conversation history is context, not proof of completion or authority.
 supplies origin live, threadId/rootItemId and a held operation owner. Retain that
 mode through stage skills; normal chat questions/feedback/design approval are
 allowed. At an external design or PR wait, return to live-continuation once,
-not worker-complete. Never invoke do-next or a separate CLI worker from live
+not worker-complete. Never invoke bg-orch or a separate CLI worker from live
 mode. `ASDF_WORKER_REQUEST` always takes precedence as persistent, never live.
 Include the current Owner on live-protected item-set/item-repo/stage/ledger-add/
 task-brief commands as well as normal owner-required helpers.
@@ -25,15 +25,15 @@ by the runner. Call its `cli.executable` and `cli.script` with
 `worker-request -Id <id> -RunId <runId> -Owner <owner>` before any work.
 Use the returned current request, not an owner or stage from old chat.
 The Node runner owns acquisition, periodic renewal and final unlock.
-Never invoke do-next, another item runner, or session-recover from a worker.
+Never invoke bg-orch, another item runner, or session-recover from a worker.
 
-**Inline handoff:** do-next supplies the item ID and held operation owner.
+**Inline handoff:** bg-orch supplies the item ID and held operation owner.
 Heartbeat it before work. The caller acquires and releases it; no binding,
 worker request or persistent acknowledgement is needed.
 
-**Decision-log correlation:** live mode sets `auditPassId = threadId`; inline do-next supplies `auditPassId`;
+**Decision-log correlation:** live mode sets `auditPassId = threadId`; inline bg-orch supplies `auditPassId`;
 persistent entry uses the validated request's `passId`, never its worker owner
-or CLI session ID. Direct work without a do-next or live-controller audit context
+or CLI session ID. Direct work without a bg-orch or live-controller audit context
 does not invent one.
 
 Read the current item, config and ledger. Re-read ADO assignment and parent
@@ -152,7 +152,7 @@ Do not acknowledge success as well. If even that command is unavailable,
 report the error and exit; the runner records an incomplete operation.
 
 End with what changed and what/where the item is waiting for. Do not start
-the next item. Inline mode returns this summary to do-next without calling
+the next item. Inline mode returns this summary to bg-orch without calling
 worker-complete or worker-fail.
 Live mode returns to live-continuation for the next wait or authorized Feature
 child handoff, without persistent acknowledgement or closing the conversation.
