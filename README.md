@@ -1,8 +1,6 @@
 # ASDF: Automated Software Development Flow
 
-<video src="https://github.com/user-attachments/assets/c8d0a4b3-d73d-4a56-9f36-43b54ba5d26e" controls width="100%"></video>
-
-If the player doesn't load, [watch the demo](https://github.com/user-attachments/assets/c8d0a4b3-d73d-4a56-9f36-43b54ba5d26e).
+https://github.com/user-attachments/assets/c8d0a4b3-d73d-4a56-9f36-43b54ba5d26e
 
 ASDF is a plugin for **GitHub Copilot** (the Copilot CLI and the GitHub Copilot app). It takes an **Azure DevOps** work item from assignment to a merged pull request.
 
