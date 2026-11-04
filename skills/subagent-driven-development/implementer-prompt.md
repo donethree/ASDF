@@ -38,6 +38,13 @@ Subagent (general-purpose):
     Failures listed there are pre-existing; any other failure is yours to fix.
     Use the recorded checkout only; never choose another one yourself.
 
+    Read the refreshed packet's customInstructions and the controller's scoped
+    phase/task directions under asdf:using-asdf's phase-instructions.md contract.
+    Before/after hooks belong to the phase owner: do not invoke them again,
+    select another driver, or run unrelated phases because they are in the
+    packet. Report conflicts/unavailable named skills; keep the same scope,
+    approval/dependency, TDD, test, review and permission gates for repairs too.
+
     ## Before You Begin
 
     If you have questions about:

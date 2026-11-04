@@ -26,6 +26,12 @@ Subagent (general-purpose):
     asdf:using-asdf's Code execution context contract. Shell cwd is codeRoot.
     Product code stays read-only; any report belongs under artifactRoot.
 
+    Read current packet customInstructions and the controller's scoped
+    re-review directions under asdf:using-asdf's phase-instructions.md contract.
+    Receiving phase hooks does not make you their owner: do not execute another
+    copy or dispatch a driver. Keep this review scoped/read-only and report
+    conflicting instructions or unavailable named skills without bypassing gates.
+
     ## The Task
 
     Read the task brief: [BRIEF_FILE]

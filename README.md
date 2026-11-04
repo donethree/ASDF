@@ -184,6 +184,10 @@ spaces and commas in a path are literal, not separators.
    org. Save includes `mcp-config.json`; cancel writes nothing. Existing local
    server entries are preserved. Setup does not log in or contact ADO.
 
+Save also creates an empty phase-instruction template for every onboarded
+repository, without asking you to enter instructions. Existing instruction files
+are preserved byte-for-byte. The review shows the paths of files to be created.
+
 The config is `<context>\asdf.config.json`; its pointer stays in
 `~/.copilot/asdf/settings.json`, never `~/.asdf`. Only configs with numeric
 `schemaVersion: 2` are supported; version 1 configs are rejected, not migrated.
@@ -214,6 +218,77 @@ writes. Only a genuinely unavailable operation reports an access/capability
 problem; no init rerun is required just to supply a server hint. Unattended runs
 report problems without asking chat questions. If MCP configuration changed,
 an already-running Copilot session may need its normal MCP reload.
+
+## Per-repository phase instructions
+
+After init, edit your repository's JSON file under the context folder:
+
+```text
+<context>\custom-instructions\org-<org>\project-<project>\repo-<repo>\instructions.json
+```
+
+Identity components are lowercased and percent-encoded for filesystem safety;
+the prefixes avoid reserved Windows names and keep equal repository names in
+different organizations/projects separate. Files are outside product repos.
+Init fills all 13 phases with empty `before` and `after` strings. For example,
+you can change just these entries in the generated file:
+
+```json
+{
+  "schemaVersion": 1,
+  "phases": {
+    "planning": {
+      "before": "",
+      "after": "Use the plan-check skill to review the completed plan and incorporate its feedback."
+    },
+    "implementation": {
+      "before": "Use the repo-driver agent to drive implementation of the approved plan.",
+      "after": ""
+    }
+  }
+}
+```
+
+Supported phases are `intake`, `featureBreakdown`, `investigation`, `design`,
+`designApproval`, `planning`, `checkout`, `implementation`, `selfReview`,
+`pullRequest`, `prFeedback`, `merge` and `closeOut`. Omitted phases/hooks and
+empty strings keep the normal behavior. Unknown phase/hook names, non-string
+instructions, invalid JSON and unsupported schema versions fail explicitly.
+Older installations with no file retain normal behavior; rerun manual init to
+create the templates.
+
+The owning skill reads instructions at phase boundaries in live, inline and
+persistent execution. A `before` hook runs after the phase's identity/ownership
+and approval checks, before its work. An `after` hook runs on completed outputs
+and incorporates feedback before advancing. In particular, `planning.after`
+finishes before implementation-task descriptions are finalized and any
+implementation begins. An explicitly selected implementation agent replaces
+the default driver; ASDF does not run a duplicate implementation afterward.
+The agent still receives the approved scope, ledger and verified checkout and
+must satisfy the same testing/review requirements.
+
+Instructions name skills/agents available in the running host; they do not
+install tools, grant permissions or bypass approval, ownership, branch,
+dependency or review gates. A required unavailable skill/agent is reported,
+not silently substituted. Hooks are guidance executed by the phase's
+controller, not shell scripts. Once a hook completes, its ledger receipt keeps
+resuming workers and unchanged polls from replaying it. Edits are read at the
+next applicable hook; completed phases are not restarted just because a file
+changed. Repo-specific instructions cannot run until the repo is resolved.
+
+To inspect the current instructions and exact path without running a hook:
+
+```shell
+node "<plugin root>\scripts\asdf.ts" phase-instructions -Id 12345 -Phase planning
+```
+
+For a multi-repository Feature or before an item has a recorded repository, use
+`phase-instructions -Org <org> -Project "<project>" -Repo "<repo>" -Phase <phase>`
+for each resolved configured workspace separately. Do not mix it with `-Id`.
+
+Repeat init creates templates for newly added repos without resetting existing
+files or deleting instructions for removed repos. Changing context folders
+does not migrate your edits from the previous context.
 
 ## Daily use
 
@@ -467,6 +542,8 @@ To check that it works, ask Copilot to run `echo ASDF-GUARD-SELFTEST`. It should
 ```
 <context>\
   asdf.config.json        orgs, projects, optional MCP hints, work item types, workspaces, user name
+  custom-instructions\org-<org>\project-<project>\repo-<repo>\instructions.json
+                         editable before/after instructions for each workflow phase
   memory\org-<org>\project-<project>\repo-<repo>.md
                          merged items and decisions, isolated by full repository identity
   # Code worktrees are separate: <worktreeRoot>\<six-character-name>

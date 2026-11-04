@@ -16,6 +16,11 @@ and `design-role` observation, including fresh unattended ownership after a
 stopped live session. Read session receipt content, record it idempotently,
 and consume the revision or confirmed forwarding before publication/delegation.
 
+Follow [the phase-instructions contract](../using-asdf/phase-instructions.md),
+including separate qualified templates/checkpoints for every named repository
+of a multi-repo Feature. This skill owns its breakdown/investigation boundaries,
+not the controller or its builder-check child.
+
 ## Cases
 
 | Stage, or situation | Sections |
@@ -34,7 +39,7 @@ Run `asdf.ts item -Id <id>`. If `ado.hldId` is set, carry on. Otherwise look for
 
 - **None:** create the Breakdown task, store its id with `"hldOwned":true`, and move it into the `InProgress` category.
 - **One assigned to you, not Completed, and not driven by another independent item in this org:** it's yours to drive. Non-owning waiters and legacy managed children are not drivers (`asdf:brainstorming`). Store its id with `"hldOwned":true`.
-- **One in the `Completed` category:** it's approved already. Store its id, copy its newest breakdown attachment into `breakdown.md` and `breakdown.v1.md`, write `{"hld":{"version":1,"approvedBy":"state","approvedAt":"<utc now>"}}`, run `asdf.ts stage -Id <id> -Stage approved`, and continue with section 7.
+- **One in the `Completed` category:** it's approved already. Resolve its named workspaces and apply `designApproval.before` for the current approved target before adoption, not retrospective drafting hooks. Store its id, copy its newest breakdown attachment into `breakdown.md` and `breakdown.v1.md`, write `{"hld":{"version":1,"approvedBy":"state","approvedAt":"<utc now>"}}`, run `asdf.ts stage -Id <id> -Stage approved`, and continue with section 7.
 - **Anything else** (assigned to someone else, or another item's `ado.hldId`): never write over a breakdown that another person drives. Store its id, write `{"hld":{"approvalRequestedAt":"<utc now>"}}`, run `asdf.ts stage -Id <id> -Stage awaiting-approval`, and stop.
 
 If the project's process doesn't allow a Task under a Feature (`add_child` fails), store the Feature's own id as `ado.hldId` with `"hldOwned":false`. Its comments then carry the rounds and the approval: shared signals require an unconditional approval, and ASDF never closes the Feature as a design task.
@@ -45,10 +50,19 @@ If the project's process doesn't allow a Task under a Feature (`add_child` fails
 - Its existing child PBIs (`asdf:ado-work-items`, "Reading a Feature's PBIs"): titles, descriptions, states and assignees.
 - **The workspaces it touches.** Match each package the Feature names to a workspace in `asdf.ts config`. Never search the disk for code.
 - **The memory index** of each repo: resolve with `asdf.ts memory-path -Org <org> -Project <project> -Repo <repo>`. Read that qualified index and its linked specs. Follow brainstorming's identity checks before reusing any legacy name-only entry.
-- **The code** in those workspaces, read-only. Do the deep dive from `asdf:brainstorming` step 2 at the Feature's breadth, and write it to the Feature's `deep-dive.md`. Cover each area the Feature touches, what depends on it, and what each step would break if it shipped alone. Each PBI's own deep dive starts from it.
+- **The code** in those workspaces, read-only. With workspace identity and design
+  ownership verified, read/apply `investigation.before` before this deep dive.
+  Do the deep dive from `asdf:brainstorming` step 2 at the Feature's breadth, and write it to the Feature's `deep-dive.md`. Cover each area the Feature touches, what depends on it, and what each step would break if it shipped alone. Each PBI's own deep dive starts from it.
 - The current `breakdown.md`, `questions.md` and `decisions.md`, if they exist.
 
+When `deep-dive.md` is ready, re-read/apply `investigation.after`, incorporate
+findings and check the evidence before drafting. Reuse completed revision
+checkpoints on resume.
+
 ## 3. Draft or revise `breakdown.md`
+
+For the current breakdown revision, read/apply `featureBreakdown.before` after
+the repository/ownership checks and inputs, before drafting.
 
 Whoever designs a PBI must be able to write its HLD from the breakdown without going back to anyone. Cover:
 
@@ -82,6 +96,10 @@ Record every decision in `decisions.md` with how it was made, as `asdf:brainstor
 
 ## 5. Builder check
 
+On the completed breakdown, re-read/apply `featureBreakdown.after`; incorporate
+its feedback before the normal builder check and approval path. A changed
+scope/dependency still needs approval; a hook cannot start dependent PBIs.
+
 Before requesting approval, once per version, dispatch a fresh subagent with [breakdown-check-prompt.md](./breakdown-check-prompt.md) and the paths to `breakdown.md` and the Feature's `deep-dive.md`. Sort what comes back as in `asdf:brainstorming` step 8.
 
 ## 6. Approval
@@ -99,6 +117,12 @@ For the Feature self-ID fallback, never close the Feature as a design task;
 explicit comment/session approval is required, not a Done shortcut.
 
 ## 7. After approval: create the PBIs (stage `approved`)
+
+After refreshing the current approved target and ownership as in step 1,
+complete `designApproval.after` once for that target before closing the
+Breakdown or creating/updating PBIs. Read fresh hooks; changes to the approved
+breakdown return to its existing revision/approval path, never implicit approval.
+Section 6 uses brainstorming's `designApproval.before` publication boundary.
 
 1. **Recheck the approved design and ownership.** For a shared/delegated
    Breakdown, copy the owner's current approved attachment/description into
@@ -125,8 +149,13 @@ explicit comment/session approval is required, not a Done shortcut.
 
 Every PBI of the Feature is in the `Completed` or `Removed` category.
 
+Verify those states and current ownership, then read/apply `closeOut.before`.
+
 1. Close the Feature only if it is assigned to you and every child is complete. Otherwise leave it as it is.
 2. Post the `feature-summary` comment on the Feature, listing each PBI with its PR.
+   With the summary ready, re-read/apply `closeOut.after`, incorporate feedback
+   and recheck child completion/ownership before marking done. Both hooks use
+   the terminal breakdown/child revision checkpoint, not a polling/session ID.
 3. Run `asdf.ts stage -Id <feature id> -Stage done`.
 
 The Feature writes no memory entry of its own; each PBI's entry names its Feature.

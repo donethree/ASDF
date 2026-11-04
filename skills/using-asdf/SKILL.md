@@ -26,6 +26,11 @@ A scheduled prompt for an existing live watch
 keeps that live origin. bg-orch, persistent workers and subagents never arm
 these watches. A missing host scheduler is reported, not silently substituted.
 
+**Repository phase instructions:** read [phase-instructions.md](./phase-instructions.md)
+at workflow entry and follow its discovery, gate and ledger contract at the
+owning skill's boundaries. Re-read `phase-instructions` there, not only at
+session start. Controllers and child reviewers do not execute duplicate hooks.
+
 ## The rules
 
 1. No work starts without a Feature, PBI, User Story, or Task. Large work is a Feature, broken into PBIs that each get their own HLD and PR (`asdf:feature-breakdown`).
@@ -61,7 +66,7 @@ The engine, by stage:
 | Break a Feature into PBIs, or make a large PBI a Feature | `asdf:feature-breakdown` |
 | Plan once the HLD is approved | `asdf:writing-plans` |
 | Worktree and branch for the item | `asdf:using-git-worktrees` |
-| Implement the plan | `asdf:subagent-driven-development` (fallback: `asdf:executing-plans`) |
+| Implement the plan | `asdf:subagent-driven-development` (fallback: `asdf:executing-plans`); an explicit `implementation.before` replacement driver uses the shared contract |
 | Every code change | `asdf:test-driven-development` |
 | A bug, a failing test, an unexpected result | `asdf:systematic-debugging` |
 | Before claiming anything is done | `asdf:verification-before-completion` |
@@ -145,6 +150,11 @@ checkout itself. Invoke helpers with the packet's quoted `cli.executable` and
 `cli.script`, not paths inferred from cwd. The CLI verifies the held lock, the
 checkout's repository origin and the recorded branch, and that no other
 unfinished item uses the checkout. It does not change the host's cwd or grant permissions.
+
+The packet also includes current repository `customInstructions` (path,
+exists, schemaVersion and phases). Every implementation, review and repair
+worker reads it under [phase-instructions.md](./phase-instructions.md);
+receiving it does not make that worker another phase-hook owner.
 
 - Refresh the packet at worker entry, on resume, and before commits or pushes. Compare item, repository, roots, branch and owner with the dispatch; a mismatch stops work rather than silently changing the assignment.
 - Before each code-file edit, run `asdf.ts code-path -Id <id> -Owner <operation owner> -Path "<target>"`. Relative paths are rooted at `codeRoot`, never the launcher. Use the returned absolute path in file tools. Paths outside that checkout, another item, artifacts, nested repositories or Git metadata are rejected, including directory-link escapes. During implementation, this also requires a recorded baseline for the checkout and branch.

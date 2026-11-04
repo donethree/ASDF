@@ -19,6 +19,14 @@ Reuse the caller's item operation owner (`asdf:using-asdf`), or acquire one for 
 
 For a PBI with an already-started standalone child, do not generate overlapping work. Block the parent until the child finishes or the scopes are explicitly separated, and reuse its completed changes when planning resumes.
 
+Follow [the phase-instructions contract](../using-asdf/phase-instructions.md).
+First verify the current approved target/ownership, including the spec refresh
+in step 3 below. Read/apply `designApproval.after` once for that approved target
+before closing the HLD or planning; changes to approved scope/dependencies
+return to the existing approval path. Then read/apply `planning.before` for the
+plan revision before drafting. These boundaries apply equally to direct, live,
+inline and persistent entry; the router does not execute another copy.
+
 1. **Close the HLD task.** Close the HLD task only when ado.hldOwned is true.
    Also recheck that this item currently drives it and it is still assigned
    to you. Then write `hld.closedAt` with `item-set` for reopen
@@ -34,7 +42,7 @@ For a PBI with an already-started standalone child, do not generate overlapping 
 4. **Decide, don't ask.** Record planning decisions as P-numbered decisions. Gaps, conflicts and choices the HLD leaves open become `P<n>` rows in `decisions.md`, with provenance `ASDF planning decision`, plus a line in the plan. They go in the PR description later.
 5. **Unlisted dependencies block.** A dependency the HLD didn't list must not be planned in. Post the `blocker` comment, run `asdf.ts stage -Id <id> -Stage blocked -Reason "<short reason>"`, and stop.
 6. **Keep it simple.** Plan the smallest change that delivers the item's scope, and nothing it didn't ask for. For a PBI that is the HLD; for a standalone Task it is the Task description within the HLD's constraints. Do not rebuild the rest of its parent.
-7. **Re-planning.** On a re-plan, archive the old plan.md and sdd\ledger.md before writing the new plan. A re-plan happens when the HLD was reopened and approved again, so `plan.md` already exists. Rename `plan.md` to `plan.v<k>.md` and `sdd\ledger.md` to `sdd\ledger.v<k>.md`, where k is the next unused number, so implementation starts fresh from the new plan. Keep the branch, the worktree and any open PR.
+7. **Re-planning.** On a re-plan, archive the old plan.md and sdd\ledger.md before writing the new plan. A re-plan happens when the HLD was reopened and approved again, so `plan.md` already exists. Rename `plan.md` to `plan.v<k>.md` and `sdd\ledger.md` to `sdd\ledger.v<k>.md`, where k is the next unused number, so implementation starts fresh from the new plan. Preserve/read archived hook checkpoints as well; do not lose an in-progress planning hook or replay completed older phases. Keep the branch, the worktree and any open PR.
 8. **Keep what works.** Every entry in the HLD's What must keep working and Edge cases sections gets a test in the plan, or the plan names the existing test that covers it. A Task plan maps entries outside its scope to existing tests or an explicit unaffected rationale; it does not implement unrelated requirements.
 
 ## Overview
@@ -83,7 +91,7 @@ independently testable deliverable.
 ```markdown
 # [Feature Name] Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use asdf:subagent-driven-development (recommended) or asdf:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED: Follow the phase-instructions implementation-driver contract. Default to asdf:subagent-driven-development (fallback: asdf:executing-plans when unavailable); an explicit implementation.before replacement driver owns the same task/test/review gates instead. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** [One sentence describing what this builds]
 
@@ -189,7 +197,9 @@ opposite failure, and the self-review catches both.
 
 ## Self-Review
 
-After writing the complete plan, look at the spec with fresh eyes and check the plan against it. This is a checklist you run yourself — not a subagent dispatch.
+After writing the complete plan, look at the spec with fresh eyes and check the
+plan against it. This default checklist runs inline; it does not replace or
+forbid a plan-check skill/agent explicitly requested by `planning.after`.
 
 **1. Spec coverage:** Skim each section/requirement in the spec. Can you point to a task that implements it? List any gaps.
 
@@ -201,12 +211,24 @@ After writing the complete plan, look at the spec with fresh eyes and check the 
 
 **5. Proportion:** Compare the plan's length to the spec's. A plan several times longer than the spec it implements is a transcript of the program, not a plan. If code blocks are most of the document, replace bodies with signatures, test names and assertions, and check that each step is still unambiguous.
 
-If you find issues, fix them inline. No need to re-review — just fix and move on. If you find a spec requirement with no task, add the task.
+If you find issues, fix them inline and recheck the affected checklist items.
+If you find a spec requirement with no task, add the task.
 
 ## After saving: the implementation tasks, then build
 
-No handoff question; the engine is fixed.
+No handoff question. On the completed plan, re-read/apply `planning.after`
+**before creating or syncing any ADO implementation task descriptions or
+dispatching implementation**. Run any named checker, incorporate its feedback
+into plan/decisions and reapply the normal plan checks. Checkpoint the finalized
+revision with `ledger-add`; a changed approved design/dependency returns to
+approval instead of being silently planned in. Task descriptions below use
+that final plan, never the pre-hook draft.
 
 1. **Create the implementation tasks.** On a re-plan, first move the old plan's implementation tasks that aren't Completed to the `Removed` category. Create one `Impl <n>: <title>` task under the parent for each plan task, through `asdf:ado-work-items`. Small, related plan tasks may share one task; when they do, say how they were grouped in the plan header. Then store the ids: write `{"ado":{"implIds":[...]}}` and run `asdf.ts item-set`.
 2. **On the Task path** (a single complex Task under someone's PBI), the Task itself is the only implementation task. Create no new tasks. Store `{"ado":{"implIds":[<item id>]}}` on the Task's item and map every plan task to it; mark it complete only after the last plan task passes.
-3. Run `asdf.ts stage -Id <id> -Stage implementing`, then `asdf:subagent-driven-development`. Use `asdf:executing-plans` only if subagents can't be dispatched.
+3. Run `asdf.ts stage -Id <id> -Stage implementing`, then enter
+   `asdf:subagent-driven-development` for preflight and `implementation.before`
+   driver selection before any default task dispatch. Use
+   `asdf:executing-plans` only if subagents can't be dispatched and no
+   replacement driver was selected. A selected driver replaces the default
+   loop; it does not run before another copy of that loop.

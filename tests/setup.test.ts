@@ -83,6 +83,12 @@ describe('numbered setup wizard', () => {
     assert.deepEqual(config.workspaces.map((w: { path: string }) => w.path), [payments, inventory]);
     assert.deepEqual(config.orgs[0].projects[0].watchScopes, [{ kind: 'team', team: 'Data Movement' }]);
     assert.deepEqual(config.orgs[1].projects[0].watchScopes, [{ kind: 'project', areaPaths: [] }]);
+    for (const [org, project, repo] of [['contoso', 'commerce', 'payments'], ['fabrikam', 'inventory', 'inventory']]) {
+      const file = join(context, 'custom-instructions', `org-${org}`, `project-${project}`, `repo-${repo}`, 'instructions.json');
+      const instructions = JSON.parse(readFileSync(file, 'utf8'));
+      assert.deepEqual(instructions.phases.planning, { before: '', after: '' });
+      assert.deepEqual(instructions.phases.implementation, { before: '', after: '' });
+    }
     for (const text of ['contoso =', 'Commerce =', '_git =', 'Payments =', 'Data%20Movement', 'showParents=false',
       'Add another organization?', 'Add another project?', 'Add another repository?', 'Add another backlog/watch source?',
       'already checked out', 'C:\\src\\Payments']) assert.ok(script.output().includes(text), text);

@@ -288,8 +288,9 @@ export async function runSetup(io: SetupIO, paths?: SetupPaths): Promise<SetupRe
         for (const project of org.projects) io.write(`  Project: ${project.project}; watches: ${project.watchScopes.length}\n`);
       }
       for (const workspace of config().workspaces) io.write(`Repository: ${workspace.org}/${workspace.project}/${workspace.repo} - ${workspace.path}\n`);
+      io.write('Per-repository phase instructions: missing templates are created under custom-instructions in the context folder at Save. Existing files are preserved; before/after instructions start empty.\n');
       for (const watch of watches()) io.write(`Watch: ${watchLabel(watch)}\n`);
-      io.write(`Types: ${JSON.stringify(config().workItemTypes)}\nFiles: ${loaded.paths.settingsFile}; ${join(loaded.draft.contextPath, 'asdf.config.json')}${loaded.draft.mcp !== null ? `; ${loaded.paths.mcpFile}` : ''}\n`);
+      io.write(`Types: ${JSON.stringify(config().workItemTypes)}\nFiles: ${preview ? preview.writes.map(write => write.path).join('; ') || '(no changes)' : 'correct the draft to preview files'}\n`);
       const choice = await number('1) Save configuration\n2) Context\n3) Organizations\n4) Projects\n5) Repositories\n6) Backlogs/watches\n7) Types\n8) Branch user name\n9) MCP entries (required)\n10) Worktree parent\n0) Cancel setup', 10);
       if (choice === 0) throw new SetupCancelled();
       if (choice !== 1) { await section(choice - 2); continue; }

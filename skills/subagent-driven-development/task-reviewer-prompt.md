@@ -29,6 +29,13 @@ Subagent (general-purpose):
     Do not infer scope from the launch project or grant yourself more access.
     Product code stays read-only; any report belongs under artifactRoot.
 
+    Read the refreshed packet's customInstructions and controller-supplied
+    review directions under asdf:using-asdf's phase-instructions.md contract.
+    Apply the review's scoped directions, not a second execution of phase
+    before/after hooks or another implementation-driver dispatch. Report
+    instruction conflicts/unavailable named skills; preserve review scope,
+    ownership, approval and permission gates.
+
     ## What Was Requested
 
     Read the task brief: [BRIEF_FILE]

@@ -9,6 +9,15 @@ Every piece of ASDF work hangs off an Azure DevOps work item. This skill finds t
 
 ## Session entry
 
+Follow [the phase-instructions contract](../using-asdf/phase-instructions.md).
+After identity/assignment/lock validation below, resolve any unambiguous named
+workspace using the existing routing rules. At the first resolved identity,
+read `phase-instructions -Id <id> -Phase intake` and run `intake.before` before
+remaining snapshot/sizing/routing work. If resolution must wait for an existing
+workspace question, do not guess hooks. Multi-repo Features resolve each named
+workspace separately as the shared contract specifies. Checkpoint the route;
+do not repeat intake hooks when resuming later stages.
+
 1. If settings/config are missing or invalid, tell the user to run `node "<plugin root>\asdf.js" --init` manually and stop. Init is not a skill; do not launch an interactive wizard from this session.
 2. Get the work item: an id or URL from the prompt, or ask with `ask_user`. If the user cannot name a Feature, PBI, User Story, or Task, stop and say so. ASDF never creates work items on its own, and never starts work without one.
 3. Resolve the org and project from the URL. With only an id, discover ADO tools
@@ -52,6 +61,8 @@ workflow or a new owner borrowed from chat history.
 A Feature goes straight to asdf:feature-breakdown; never ask whether it should be a Feature.
 
 - If its state category isn't `InProgress` or `Resolved`, move it to the first `InProgress` state through `asdf:ado-work-items` without asking, and say so. `bg-orch` only keeps working on In Progress items.
+- With the snapshot/Feature route ready, re-read and apply `intake.after`,
+  incorporate its feedback and recheck ownership before the handoff.
 - Then run `asdf.ts stage -Id <id> -Stage new` and `asdf:feature-breakdown` in this session. The breakdown works out whether it needs more than one PBI.
 
 ## A PBI or User Story
@@ -61,10 +72,12 @@ A Feature goes straight to asdf:feature-breakdown; never ask whether it should b
    - **Large** means the work would ship as separate steps, each a sensible PR on its own, like importing data and then switching its readers over. Work that changes more than one workspace is always large. When in doubt, it is not large.
    - **Not large:** write `{"size":"one"}` to `<item>\patch.json` and run `asdf.ts item-set -Id <id> -File <item>\patch.json`.
    - **Large:** explain why, listing the steps you see. Then ask with `ask_user`, one field with two options: `feature`, "Make it a Feature, with a PBI per step (recommended)", or `one`, "Keep it as one PBI and one PR".
-     - `feature`: follow "Making a PBI into a Feature" in `asdf:feature-breakdown`, in this session, and stop here. The PBI waits until the breakdown is approved.
+     - `feature`: with the size decision recorded, apply `intake.after` before following "Making a PBI into a Feature" in `asdf:feature-breakdown`, in this session, and stop here. The PBI waits until the breakdown is approved.
      - `one`: write `{"size":"one"}` with `item-set`, and add a `D` row to `decisions.md`, "Keep it as one PBI", decided by <name> (session). The HLD's decisions table carries it to ADO.
 2. If its state category isn't `InProgress` or `Resolved`, ask whether to move it to In Progress. Explain that `bg-orch` only keeps working on In Progress items. On a yes, move it through `asdf:ado-work-items`.
-3. Then run `asdf.ts stage -Id <id> -Stage new` and `asdf:brainstorming`.
+3. With the snapshot/size/route ready, re-read and apply `intake.after`,
+   incorporate feedback and recheck the route's gates. Then run
+   `asdf.ts stage -Id <id> -Stage new` and `asdf:brainstorming`.
 
 ## Task routing
 
@@ -74,13 +87,22 @@ First re-read the Task's assignee and parent. If the Task isn't assigned to you,
 
 1. **Find the workspace.** Run `asdf.ts item-repo -Id <id> -Name <package>` with the package the Task names. Failing that, use a person's reply naming one, or the package of the parent's ASDF item (`repo.name` of the item for `ado.parentId`, if it's tracked). If the Task names no package with a workspace, post the blocker comment asking which one, and stop. List the configured workspaces (`asdf.ts config`) in it, and run `asdf.ts stage -Id <id> -Stage blocked -Reason "package unknown"`.
    Include `-Org <repo org> -Project <repo project>` when the selected name is ambiguous; preserve those qualifiers when using a parent's recorded workspace.
+   Once resolved, apply any unfinished `intake.before` before sizing; this is
+   the same intake attempt, not a second hook invocation.
 2. **Judge the size.** Small means a few lines of change, with no new interfaces, no new dependencies, and no design ambiguity. Anything else is complex.
    - Post the `task-size` comment on the Task.
    - Record the route: write `{"route":"small"}` (or `"full"`) to `<item>\patch.json`, then run `asdf.ts item-set -Id <id> -File <item>\patch.json`.
+   - Re-read/apply `intake.after` on the Task snapshot and route, incorporate
+     feedback and recheck size/scope before the selected handoff below.
 3. **Small** (no parent needed, no HLD, no new work items):
    1. `asdf.ts stage -Id <id> -Stage implementing`
    2. `asdf:using-git-worktrees`
-   3. Implement with `asdf:test-driven-development` (no plan document)
+   3. After checkout/baseline and scope preflight, read/apply
+      `implementation.before`. Use the shared exclusive replacement-driver
+      contract if selected; otherwise implement with
+      `asdf:test-driven-development` (no plan document). Verify completion/
+      tests, then re-read/apply `implementation.after`; incorporate and verify
+      any changes before self-review. Ledger checkpoints survive resume.
    4. `asdf.ts stage -Id <id> -Stage self-review`
    5. `asdf:requesting-code-review`
    6. `asdf:finishing-a-development-branch` to open the PR

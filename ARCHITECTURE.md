@@ -129,12 +129,19 @@ dedicated entries block Save instead of being overwritten or unrestricted.
 Only final Save persists edits, retaining concurrency and rollback checks.
 Setup makes no ADO calls and cannot establish authentication or availability.
 
+The same save transaction creates missing per-repository instruction templates
+under `custom-instructions\org-<org>\project-<project>\repo-<repo>\instructions.json`.
+It snapshots each destination and never replaces an existing instruction file.
+No directory/file is created during preview; template writes participate in the
+normal conflict detection and conditional rollback.
+
 | Module | Responsibility |
 |---|---|
 | [watchScopes.ts](scripts/lib/watchScopes.ts) | Typed explicit project/team scopes, v2 config normalization and validation. |
 | [setupInputs.ts](scripts/lib/setupInputs.ts) | Local URL/identity parsing and existing checkout validation. |
 | [localState.ts](scripts/lib/localState.ts) | Shared atomic file primitives and owner-marked short directory guards. |
 | [setupState.ts](scripts/lib/setupState.ts) | Draft/snapshots, approved local MCP edits, configuration validation and conditional rollback. |
+| [customInstructions.ts](scripts/lib/customInstructions.ts) | Qualified instruction paths, empty before/after phase templates, strict schema validation and read-only runtime loading. |
 | [setupPrompt.ts](scripts/lib/setupPrompt.ts) | Line-oriented terminal IO, cancellation and concrete input examples. |
 | [setup.ts](scripts/lib/setup.ts) | Add/Edit/Remove collection loops, Add-another prompts and final review/save. |
 | [discovery.ts](scripts/lib/discovery.ts) | Escaped scoped discovery queries, independent assignment queries and paging validation. |
@@ -537,6 +544,7 @@ node "<plugin root>/scripts/asdf.ts" <command> -Name value ...
 | `item-set` | `setItem` | `-Id -File`: deep-merges a JSON patch into `state.json`. Refuses `id`, `stage`, `resumeStage` and `stats`. |
 | `item-repo` | `setItemRepo` | `-Id -Name [-Org -Project]`: records the workspace, matched by repo name then folder name within optional identity qualifiers. Ambiguity fails explicitly. |
 | `memory-path` | `memoryPath` | `-Org -Project -Repo`: returns the qualified, filesystem-safe memory index path; creates no files. |
+| `phase-instructions` | `phaseInstructions` / `repositoryPhaseInstructions` | `-Phase` and either `-Id` or `-Org -Project -Repo`: reads current before/after instructions by recorded item repo or a qualified configured workspace. Missing legacy files return `exists: false` and empty hooks; invalid files fail explicitly. Executes no instruction and creates no files. |
 | `source-fallback` | `sourceFallback` | `-Id -Owner -BaseRef -Reason`: switches the clean configured checkout to the item branch: an existing branch is adopted with its commits; a new one starts at the fetched remote base (`refs/remotes/<BaseRef>`, any branch). Preserves the previous branch/HEAD and any clean detached worktree. Rejects uncommitted changes, Git operations in progress and competing reservations; never resets or stashes. |
 | `checkout-record` | `recordCheckout` | `-Id -Owner -Path -Reason`: records a checkout made by the repo's README procedure, or an existing branch to adopt. Requires the item's repository origin, a branch under `user/<userName>/` and no other unfinished item in that checkout. Switches, resets and moves nothing. |
 | `baseline` | `runBaseline` | `-Id -Owner -BuildCommand [-TestCommand]`: runs the repo build then baseline tests in verified codeRoot, retaining baseline.json/log in artifactRoot. A failing build skips tests. Always exits 0 once recorded; `passed: false` means known failures, not a blocker. |
@@ -569,6 +577,7 @@ node "<plugin root>/scripts/asdf.ts" <command> -Name value ...
 | [`items.ts`](scripts/lib/items.ts) | Item folders and `state.json`: the stage list, queue priorities, slugs, creation, patches, stage changes, blocker bookkeeping, stats, and recording an item's workspace. |
 | [`lock.ts`](scripts/lib/lock.ts) | Per-item locks: atomic creation, owner checks, heartbeats and taking over a stale lock. |
 | [`execution.ts`](scripts/lib/execution.ts) | Validated per-item execution context, instruction inventory, code-path containment and artifact-path containment. Uses native canonical paths for Windows short-name/junction identity. |
+| [`customInstructions.ts`](scripts/lib/customInstructions.ts) | All 13 named workflow phases and schema-version-1 hooks. Normalizes omitted hooks to empty strings, rejects unknown phases/hooks and unsafe linked paths. Uses full repository identity, not work-item project. |
 | [`queue.ts`](scripts/lib/queue.ts) | The work queue: unlocked items in stages with a priority, ordered by priority, then time in the stage. |
 | [`signals.ts`](scripts/lib/signals.ts) | Reading comments (HTML or Markdown to text, the `[ASDF]` marker, "approved"), deciding whether the governing item is active, the transition rules, and which of a Feature's PBIs are ready to start. |
 | [`repoSkills.ts`](scripts/lib/repoSkills.ts) | Finds a repo's review, build and test skills (under `.github/skills`, `.agents/skills` and `.claude/skills`) and agents (under `.github/agents`). |

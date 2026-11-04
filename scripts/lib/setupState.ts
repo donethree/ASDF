@@ -2,6 +2,7 @@ import { readFileSync, rmSync } from 'node:fs';
 import { homedir, userInfo } from 'node:os';
 import { isAbsolute, join, resolve } from 'node:path';
 import { atomicText, inside, physical } from './localState.ts';
+import { customInstructionsPath, emptyCustomInstructions } from './customInstructions.ts';
 import { prepareConfig, settingsPath, validateContextPath, withSettingsGuard } from './settings.ts';
 import { configRecord, DEFAULT_TYPES, normalizeConfig, type AsdfConfig } from './watchScopes.ts';
 import { fail, same } from './util.ts';
@@ -208,6 +209,11 @@ export function prepareSetupSave(input: LoadedSetup): SetupWritePlan {
     const previous = file.content === null ? {} : record(file.content, file.path);
     previous.mcpServers ??= {};
     if (JSON.stringify(previous) !== JSON.stringify(draft.mcp)) plan(file, draft.mcp);
+  }
+  for (const workspace of draft.config.workspaces) {
+    const file = snapshot(loaded, customInstructionsPath(draft.contextPath,
+      { org: workspace.org, project: workspace.project, name: workspace.repo }));
+    if (file.content === null) plan(file, emptyCustomInstructions());
   }
   plan(target, draft.config);
   plan(settings, { ...(settings.content === null ? {} : record(settings.content, settings.path)), schemaVersion: 1, contextPath: draft.contextPath });

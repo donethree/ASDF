@@ -42,12 +42,29 @@ ownership-checked close-out; otherwise pause a reassigned item without ADO
 or code writes. Reuse the existing item worktree and refresh execution-context
 before code work; this session's artifact cwd is never the code root.
 Completed ledger tasks stay completed even if old chat says otherwise.
+
+Read [the phase-instructions contract](../using-asdf/phase-instructions.md).
+The stage skill doing the work owns its hooks; this router does not run extra
+before/after hooks just because it loads that skill. Require fresh
+`phase-instructions` reads at those boundaries and retain ledger checkpoints
+across live, inline and persistent handoffs. Invalid config or unavailable
+hook-named skills/agents use the infrastructure-failure path below, never a
+silent default or business-stage change.
+
 Before continuing stage `implementing`, require the executor's
 `asdf:using-git-worktrees` preflight: the recorded checkout verified, or set up
 per the repo's README, and a recorded baseline for that checkout and branch
 (reused when unchanged; red means known failures). For a resumed small Task,
 run it here before continuing TDD; full-plan executors run it at their entry.
 Preserve the recorded checkout and branch.
+
+For a resumed small Task, this router owns `implementation.before` after that
+preflight and scope/dependency checks, before continuing TDD. Honor an explicit
+replacement driver exclusively under the shared contract; otherwise continue
+the default small-Task work. Verify completion/test evidence, then re-read/apply
+`implementation.after`, incorporate/verify changes and checkpoint before
+`self-review`. Do not rerun intake, invent a plan/HLD or replay completed hooks.
+For full plans, the executor owns these same boundaries/driver selection.
 
 Check the required ASDF skills are enabled and resolve to this plugin before
 loading them. Discover ADO tools in this worker process using
@@ -105,7 +122,7 @@ write its own failure event; the coordinator can record the returned failure.
 | `pr-ready` | `asdf:finishing-a-development-branch` (merge) |
 | `merged` | `asdf:finishing-a-development-branch` (close out only) |
 | `pbis-done` | `asdf:feature-breakdown` (close out Feature) |
-| `implementing` | Parent or full Task: `asdf:subagent-driven-development`, from ledger; small Task: continue TDD from `asdf:intake` Task routing |
+| `implementing` | Parent or full Task: `asdf:subagent-driven-development`, from ledger with exclusive driver selection; small Task: the preflight/hook/TDD path above |
 | `self-review` | `asdf:requesting-code-review` |
 | `approved` | Feature: `asdf:feature-breakdown`; otherwise `asdf:writing-plans` |
 | `answers-received` | Feature: `asdf:feature-breakdown`; otherwise `asdf:brainstorming` |
@@ -116,6 +133,9 @@ packets, load target-repo instructions and use explicit verified codeRoot
 paths. No detached helpers or unawaited workers: finish all child work before
 acknowledging the run. The runner does not create a second worktree.
 Design stays read-only against recorded workspace revisions.
+Every implementation/review/repair worker receives current packet
+customInstructions and its scoped directions; child entry does not replay
+owner hooks. A completed driver or phase is not restarted by a new worker run.
 
 Heartbeat at entry, between long steps, and before mutations. On
 `ASDF_LOCK_NOT_OWNER`, stop immediately without further writes or unlock.

@@ -7,6 +7,8 @@ import { isLocked } from './lock.ts';
 import { fail, git, readJson, same } from './util.ts';
 import { resolveWorkspace } from './workspaces.ts';
 import { artifactPath, inside, physical, stat } from './artifacts.ts';
+import { readCustomInstructions, type RepositoryInstructions } from './customInstructions.ts';
+import { contextPath } from './settings.ts';
 export { artifactPath } from './artifacts.ts';
 
 export interface InstructionFiles {
@@ -28,6 +30,7 @@ export interface ExecutionContext {
   head: string;
   checkoutMode: 'worktree' | 'source';
   instructions: InstructionFiles;
+  customInstructions: RepositoryInstructions;
 }
 
 const samePath = (a: string, b: string) =>
@@ -162,6 +165,7 @@ export function executionContext(id: number, owner: string, requestedRepoPath?: 
     workspaceReadRoot, codeRoot: resolve(repo.worktreePath), artifactRoot, branch, checkoutMode,
     head: gitOutput(codeRoot, ['rev-parse', '--verify', 'HEAD']),
     instructions: instructionFiles(codeRoot),
+    customInstructions: readCustomInstructions(contextPath(), repo),
   };
 }
 

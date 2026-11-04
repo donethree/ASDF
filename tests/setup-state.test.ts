@@ -32,6 +32,49 @@ describe('offline setup persistence', () => {
     assert.equal(mcp.mcpServers['ado-contoso'].headers['X-MCP-Insiders'], 'true');
     assert.equal(getConfig().schemaVersion, 2);
   });
+
+  it('creates a complete empty phase template only on confirmed save', () => {
+    const file = join(loaded.draft.contextPath, 'custom-instructions', 'org-contoso', 'project-storage', 'repo-storage', 'instructions.json');
+    const plan = prepareSetupSave(loaded);
+    assert.equal(existsSync(file), false);
+    saveSetup(plan);
+    assert.deepEqual(JSON.parse(readFileSync(file, 'utf8')), {
+      schemaVersion: 1,
+      phases: {
+        intake: { before: '', after: '' }, featureBreakdown: { before: '', after: '' },
+        investigation: { before: '', after: '' }, design: { before: '', after: '' },
+        designApproval: { before: '', after: '' }, planning: { before: '', after: '' },
+        checkout: { before: '', after: '' }, implementation: { before: '', after: '' },
+        selfReview: { before: '', after: '' }, pullRequest: { before: '', after: '' },
+        prFeedback: { before: '', after: '' }, merge: { before: '', after: '' },
+        closeOut: { before: '', after: '' },
+      },
+    });
+  });
+
+  it('preserves user instruction files byte-for-byte when setup is repeated', () => {
+    saveSetup(prepareSetupSave(loaded));
+    const file = join(loaded.draft.contextPath, 'custom-instructions', 'org-contoso', 'project-storage', 'repo-storage', 'instructions.json');
+    const text = '{ "schemaVersion": 1, "phases": { "planning": { "after": "Use skill X" } } }\r\n';
+    writeFileSync(file, text);
+    const plan = prepareSetupSave(loadSetup(loaded.paths));
+    assert.equal(plan.writes.some(write => write.path === file), false);
+    saveSetup(plan);
+    assert.equal(readFileSync(file, 'utf8'), text);
+  });
+
+  it('rolls back newly created templates when a later setup write fails', () => {
+    loaded.draft.config.userName = 'edited';
+    const plan = prepareSetupSave(loaded);
+    const file = join(loaded.draft.contextPath, 'custom-instructions', 'org-contoso', 'project-storage', 'repo-storage', 'instructions.json');
+    const settings = readFileSync(loaded.paths.settingsFile, 'utf8');
+    assert.throws(() => saveSetup(plan, { ...setupStore, replace: (path, content) => {
+      if (path.endsWith('asdf.config.json')) throw new Error('test config write failure');
+      setupStore.replace(path, content);
+    } }), { code: 'ASDF_SETUP_SAVE_FAILED' });
+    assert.equal(existsSync(file), false);
+    assert.equal(readFileSync(loaded.paths.settingsFile, 'utf8'), settings);
+  });
   it('includes required remote tooling in the save plan without writing before Save', () => {
     const deferred = loadSetup(loaded.paths);
     delete deferred.draft.config.orgs[0].mcpServer;

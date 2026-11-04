@@ -25,6 +25,14 @@ The rules for a pass:
 - **Do not stop after one item.** Keep going until the queue has nothing left that can move.
 - **Never call `ask_user` in `bg-orch`.** Questions go to ADO as question rounds.
 
+Follow [the phase-instructions contract](../using-asdf/phase-instructions.md).
+Sync, selection and unchanged waiting scans execute no hooks. Inline work-item
+and persistent workers use the same phase-owning skills and durable ledger;
+only those owners read/run hooks at work boundaries. Never replay a completed
+phase or duplicate a driver when a new pass starts. Invalid custom instructions
+or unavailable hook-named skills/agents use the existing infrastructure-failure
+reporting, not a silent fallback or an ADO business blocker.
+
 ## Compact decision log
 
 After preconditions provide the context and pass owner, use that owner as

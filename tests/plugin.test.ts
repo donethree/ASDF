@@ -81,11 +81,12 @@ describe('manifests', () => {
     assert.equal(existsSync(join(REPO, 'THIRD-PARTY-NOTICES.md')), false);
   });
 
-  it('credits Superpowers and Superlite at the top of the README', () => {
-    const top = read('README.md').split(/\r?\n/).slice(0, 25).join('\n');
-    assert.match(top, /https:\/\/github\.com\/obra\/superpowers/);
-    assert.match(top, /https:\/\/github\.com\/iha2\/superlite/);
-    assert.match(top, /Jesse Vincent/);
+  it('credits Superpowers and Superlite in the README Credits section', () => {
+    const credits = read('README.md').split(/^## Credits\r?$/m)[1];
+    assert.ok(credits, 'README needs a Credits section');
+    assert.match(credits, /https:\/\/github\.com\/obra\/superpowers/);
+    assert.match(credits, /https:\/\/github\.com\/iha2\/superlite/);
+    assert.match(credits, /Jesse Vincent/);
   });
 
   it('README describes the plugin and states the license', () => {

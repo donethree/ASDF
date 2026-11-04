@@ -14,6 +14,14 @@ a short linked worktree from the default branch. Worktrees may live outside asdf
 Hold the item operation lock from `asdf:using-asdf`. The app's selected project
 is only the launch location; the repository is the configured `repo.clonePath`.
 
+Follow [the phase-instructions contract](../using-asdf/phase-instructions.md).
+After reading the current item and validating ownership/repository, read/apply
+`checkout.before` before checkout/setup work below; if the workspace is unresolved,
+do this immediately after step 2 resolves it. For a recorded checkout, first
+verify its execution context in step 1, then apply the hook before step 4.
+Reuse the checkout-attempt checkpoint on entry/resume, not another hook invocation
+merely because preflight verifies an existing checkout.
+
 ## 1. Reuse what's there
 
 Run `asdf.ts item -Id <id>`. If `repo.worktreePath` is set and exists, run
@@ -117,6 +125,12 @@ asdf.ts baseline -Id <id> -Owner <operation owner> -BuildCommand "<repo build co
   and `task-done` accept it while the checkout and branch are unchanged and HEAD
   descends from it. Run it again after `checkout-record` or a fallback changes
   the checkout or branch, or when the README says setup changed.
+
+With the checkout, initialization and recorded baseline ready, re-read/apply
+`checkout.after` before returning to implementation. Incorporate its feedback
+and revalidate origin/branch/baseline and permissions; repeat setup checks only
+when its changes require them. Checkpoint the checkout/branch/baseline identity,
+including on the source-fallback path. A red baseline retains the rules above.
 
 ## 5. Cleanup
 

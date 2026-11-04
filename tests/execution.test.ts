@@ -63,6 +63,18 @@ describe('item execution context', () => {
     assert.deepEqual(target.json.instructions.directory, [join(realpathSync.native(work.repo), 'src', 'billing', 'AGENTS.md')]);
   });
 
+  it('passes current repository phase instructions to implementation and review workers', () => {
+    const file = join(ctx.context, 'custom-instructions', 'org-contoso', 'project-storage', 'repo-storage', 'instructions.json');
+    mkdirSync(join(file, '..'), { recursive: true });
+    writeFileSync(file, JSON.stringify({
+      schemaVersion: 1, phases: { implementation: { before: 'Use agent X to drive the approved plan.', after: '' } },
+    }));
+    const result = packet();
+    assert.equal(result.code, 0, JSON.stringify(result.json));
+    assert.equal(result.json.customInstructions.path, file);
+    assert.equal(result.json.customInstructions.phases.implementation.before, 'Use agent X to drive the approved plan.');
+  });
+
   it('finds applicable local instructions even when Git ignores them', () => {
     mkdirSync(join(work.repo, '.github', 'instructions'), { recursive: true });
     mkdirSync(join(work.repo, 'src', 'billing'), { recursive: true });

@@ -11,6 +11,15 @@ Unattended bg-orch, persistent workers (`ASDF_WORKER_REQUEST`) and subagents
 never enter it or create watches. A scheduled check for an existing live watch
 retains its original **live** mode; it is not an unattended worker.
 
+Read [the phase-instructions contract](../using-asdf/phase-instructions.md).
+This controller does not execute phase hooks during loading, signal checks or
+idle polling. Hand current ownership/target and ledger history to the stage
+owner through work-item; that owner re-reads hooks at its actual boundaries.
+After current approval, writing-plans/Feature section 7 owns
+`designApproval.after` before planning/PBI creation. Completed hooks do not
+replay on chat reentry or timer generation changes; interrupted hook effects
+must be reconciled before resuming.
+
 ## Identity and ownership
 
 Carry `threadId` (one generated UUID), `rootItemId` (original PBI/Task/Feature),
@@ -214,6 +223,10 @@ Dispatch `asdf:work-item` with origin live, held owner, threadId and rootItemId.
 Its shared stage table handles planning/implementation/review/merge in this
 conversation. At the next supported wait return here once. Do not recurse into
 intake, bg-orch or a persistent CLI worker.
+Preserve the stage owner's hook result/failure and checkpoint: later repository
+instruction edits apply at later boundaries, not by restarting finished phases.
+Invalid config/unavailable named skills are explicit live failures, never
+authorization to fall back, change permissions or continue with the old design.
 
 PR chat "approved" never substitutes for votes or branch policies. Live PR
 feedback may direct code changes with recorded provenance, but cannot fabricate

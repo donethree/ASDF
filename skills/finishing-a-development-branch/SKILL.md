@@ -19,7 +19,16 @@ a PR vote or bypass checks. After close-out, return to the live controller for
 watch cleanup and any approved Feature child handoff. Unattended runs retain
 their existing return behavior and never create live watches.
 
+Follow [the phase-instructions contract](../using-asdf/phase-instructions.md).
+Run hooks only at the mode boundaries below with durable PR/commit checkpoints,
+never from a wait scan or by redispatching a completed implementation plan.
+
 ## Mode 1: open the PR (from stage `self-review`)
+
+After ownership/context and passed self-review are verified, read/apply
+`pullRequest.before` before suite/push/PR work. Incorporate its feedback under
+the same verification/review/approval gates, including scoped re-review for
+new code. Existing PRs keep their identity on resume.
 
 1. **Run the full test suite** in codeRoot, through the repo's own test skills when it has them. Failures listed in `<item>\known-failures.md` (a red baseline) are pre-existing: they don't block, and the PR description lists them. Don't open a PR on any other failure. Diagnose and repair failures directly with `asdf:systematic-debugging` and TDD, not by redispatching a completed plan. This also applies to small Tasks with no plan. Record each attempt and result in `<item>\reviews\full-suite-repair.md`, retaining the count across passes. Allow at most two repair attempts; if still red, post a blocker and set `stage -Stage blocked -Reason "<failure>"`. Stop rather than re-running reviews every hour. Reset the count only after green or an explicit human reply authorizing another repair cycle. After repair commits, self-review the changed range before continuing.
 2. **Push the branch:** `git -C "<codeRoot>" push -u origin <repo.branch>`. Push only repo.branch. Never force-push, never push to main or master.
@@ -31,6 +40,10 @@ their existing return behavior and never create live watches.
 5. **Update ADO and the item:**
    - If a Review task exists and is still assigned to you, move it to the `Completed` category.
    - Write `{"ado":{"prId":<id>}}` with `asdf.ts item-set`.
+   - With the PR, links and summary ready, re-read/apply `pullRequest.after`.
+     Incorporate feedback and recheck tests/review, current PR status and
+     ownership before further writes or entering the wait. Update/reuse this
+     PR rather than creating another; checkpoint its ID/source HEAD.
    - Run `asdf.ts stage -Id <id> -Stage pr-open`.
 
 ## Mode 2: merge (stage `pr-ready`)
@@ -41,6 +54,10 @@ The signals say the PR is approved, the build is green, and no threads are activ
 - the latest PR build `succeeded`, or the repo has none;
 - no active thread whose last comment is human;
 - `mergeStatus` isn't `conflicts`.
+
+After those fresh checks pass, read/apply `merge.before`; incorporate feedback,
+then repeat the live merge checks above immediately before enabling auto-complete.
+It cannot supply a vote, bypass policy or approve new design/dependencies.
 
 Set auto-complete only after ASDF's own merge checks pass. Then:
 
@@ -53,6 +70,12 @@ Then run `asdf.ts stage -Id <id> -Stage merging`. If a check fails, run `stage p
 ## Mode 3: close out (stage `merged`)
 
 Before close-out, compare any local follow-up commits with the completed PR's recorded source commit and inspect uncommitted changes. Preserve work not included in that PR; record a local blocker and, only when the governing item is still yours, post the blocker comment. Do not delete that work or claim it merged.
+
+Only after PR completion is confirmed, read/apply `merge.after` once for its
+completed source commit, before close-out (never merely after auto-complete
+setup). Respect the completed-PR/reassignment rules; do not push or edit terminal
+PRs. Then read/apply `closeOut.before` after the terminal-state/ownership and
+unmerged-work checks, before closing tasks or writing close-out artifacts.
 
 1. **Close ASDF's tasks.** Re-read each task's assignee. Move an open task to `Completed` only if it is still assigned to you; this includes a standalone Task itself. Close the HLD task only when ado.hldOwned is true. Leave reassigned tasks untouched and name them in the summary.
 2. **The parent.** Close the parent only if it is assigned to you and every child task is complete. Otherwise leave it as it is: it may belong to someone else, or other developers' tasks may still be open.
@@ -72,6 +95,11 @@ Before close-out, compare any local follow-up commits with the completed PR's re
    Leave legacy name-only indexes untouched. Their entries may be reused only after checking the linked item's stored full repository identity; never infer identity from the filename.
 
 5. **Record the `final-summary`.** Post it on the governing item only if it is still assigned to you. After reassignment, keep the summary locally in `item.md` instead; safe local close-out may still reach `done` without editing another person's work item.
+   With as-built/memory/summary artifacts ready, re-read/apply `closeOut.after`.
+   Incorporate feedback, reconcile external effects and recheck ownership,
+   unmerged work and cleanup safety before cleanup/done. This is not permission
+   to change shipped code or another owner's work item; retain its ledger
+   checkpoint through cleanup.
 6. **Clean up:**
    - **Checkout recorded with `checkout-record`** (`repo.checkoutRecord` set): the
      repository's procedure or the person created it, so leave the checkout and

@@ -22,6 +22,12 @@ Subagent (general-purpose):
     use codeRoot for all Git reads. Stop on mismatch or missing permissions.
     Product code is read-only; reports belong under artifactRoot.
 
+    Read refreshed packet customInstructions and the controller's applicable
+    review directions under asdf:using-asdf's phase-instructions.md contract.
+    The phase owner executes before/after hooks; do not replay them or dispatch
+    an implementation driver. Preserve read-only review, scope, approval,
+    dependency and permission gates; report conflicts/unavailable named skills.
+
     ## What Was Implemented
 
     [DESCRIPTION]

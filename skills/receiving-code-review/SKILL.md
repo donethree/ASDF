@@ -17,6 +17,13 @@ its provenance without fabricating a PR thread or approval vote.
 
 For active-PR code work, refresh the execution context and follow `asdf:using-asdf`'s Code execution context contract. Validate edit paths, load applicable target-repo instructions, bind each build/Git command to codeRoot, and refresh before commits or pushes. A missing/mismatched checkout blocks rather than choosing another location; the checkout must already be recorded.
 
+Follow [the phase-instructions contract](../using-asdf/phase-instructions.md).
+After the active-PR/ownership/context checks, read/apply `prFeedback.before`
+before cancellation or feedback work below. Key this attempt to the actual new
+thread/update, build or conflict/source revision; idle scans and a new worker
+are not new feedback. Give repair/review children current customInstructions
+and their directions, not a second invocation of the owner's hooks.
+
 1. **Auto-complete first.** If the item came from `merging`, auto-complete is already set. Cancel it before anything else: `repo_pull_request_write update`, with `autoComplete=false`.
 2. **Each active thread whose last comment is human.** Evaluate it with the rigor below, then do exactly one of these:
    - **Fix it.** Work in the verified codeRoot with TDD, run the covering tests, commit, and push with `git -C "<codeRoot>" push origin <repo.branch>`. Push only repo.branch. Never force-push. Then reply `[ASDF] Fixed in <sha7>: <what changed>` and set the thread status to `fixed`. Mark a thread Fixed only after the fix is pushed.
@@ -24,7 +31,13 @@ For active-PR code work, refresh the execution context and follow `asdf:using-as
 3. **A failed build.** Read the logs (`pipelines_build_log`), find the cause (`asdf:systematic-debugging`), fix it, and push.
 4. **A merge conflict.** Merge the default branch into the item's branch (`git -C "<codeRoot>" merge origin/<default branch>`). Resolve, retest, and push. Never rebase, never force-push.
 5. **Stuck.** After two failed attempts at the same problem, post the `blocker` comment on the item and run `asdf.ts stage -Id <id> -Stage blocked -Reason "<short reason>"`.
-6. **Done.** When every human thread has a reply or a fix, run `asdf.ts stage -Id <id> -Stage pr-open` with the live Owner when applicable. Return to live-continuation in live mode to monitor approval/checks; otherwise return to bg-orch as before.
+6. **Done.** When every human thread has a reply or a fix, re-read/apply
+   `prFeedback.after` on the responses/fix evidence. Incorporate feedback,
+   verify/review changed code and recheck active PR/ownership before any push
+   or PR mutation; update responses only after confirmed effects. Checkpoint
+   this feedback revision, then run `asdf.ts stage -Id <id> -Stage pr-open`
+   with the live Owner when applicable. Return to live-continuation in live
+   mode to monitor approval/checks; otherwise return to bg-orch as before.
 7. **No new dependencies.** If a reviewer asks for one the HLD didn't list, that's a blocker: stop and ask, don't add it.
 
 ## Overview

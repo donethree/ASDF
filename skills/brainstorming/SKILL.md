@@ -25,6 +25,11 @@ the old operation owner was released while waiting. All live-protected CLI
 mutations carry the current Owner. Unattended/background entry never creates
 a live schedule.
 
+Follow [the phase-instructions contract](../using-asdf/phase-instructions.md).
+This skill owns investigation/design and approval-request hooks; current
+approval completion is owned by writing-plans (or Feature section 7).
+Shared-design, pending-feedback and ownership checks below precede all hooks.
+
 ## What people said vs. what you guessed
 
 Keep them apart everywhere. What a person chose is a decision by that person. What you chose is an ASDF assumption until the HLD is approved. Never present a guess as something someone said.
@@ -73,7 +78,7 @@ historical `hldOwned` alone is not current authority.
 
 - **No HLD yet:** create the HLD and Review tasks together (`asdf:ado-work-items`), store their ids with `"hldOwned":true`, and move the HLD task into the `InProgress` category.
 - **An HLD task assigned to you, not Completed, and not driven by another independent item in this org:** it's yours to drive. Store its id with `"hldOwned":true`, create the Review task only if this item has none, and design as below.
-- **An HLD task in the `Completed` category:** it's approved already. Store its id and create the Review task. Copy its design (the newest HLD attachment, or the task's description) into `hld.md` and `hld.v1.md`. Write `{"hld":{"version":1,"approvedBy":"state","approvedAt":"<utc now>"}}`, run `asdf.ts stage -Id <id> -Stage approved`, and stop.
+- **An HLD task in the `Completed` category:** it's approved already. Once its repository identity is resolved, read/apply `designApproval.before` before adopting the current approved target; do not replay drafting hooks. Store its id and create the Review task. Copy its design (the newest HLD attachment, or the task's description) into `hld.md` and `hld.v1.md`. Write `{"hld":{"version":1,"approvedBy":"state","approvedAt":"<utc now>"}}`, run `asdf.ts stage -Id <id> -Stage approved`, and stop.
 - **Anything else** (assigned to someone else, or another item's `ado.hldId`): Never design over an HLD that another person or another ASDF item drives. Store its id, create the Review task, write `{"hld":{"approvalRequestedAt":"<utc now>"}}`, run `asdf.ts stage -Id <id> -Stage awaiting-approval`, and stop. The item waits for that HLD's approval.
 
 ## 2. Gather inputs (read-only)
@@ -106,6 +111,12 @@ Check the size of a PBI or User Story at stage `new` before drafting anything. S
   ```
 
 ### The deep dive
+
+Once workspace and current design authority are verified and the size route
+is settled, read/apply `investigation.before` before deep-dive work. On a
+completed `deep-dive.md`, re-read/apply `investigation.after`; incorporate its
+findings and check citations/coverage before step 3. Use the investigation's
+revision/workspace commits for ledger checkpoints, not each session entry.
 
 Study the existing code before drafting, so the design reuses what exists, keeps everything that works today working, and handles the edge cases the code already handles. Never draft or revise the HLD before `deep-dive.md` is written. It lives in the item folder. The HLD is built on it, and the code check (step 8) checks both against the code.
 
@@ -150,6 +161,10 @@ Read: <each other workspace searched, the same way>
 ```
 
 ## 3. Draft or revise `hld.md`
+
+Read/apply `design.before` for this candidate HLD revision after the identity,
+ownership and feedback checks. Reuse a completed hook when returning from a
+question round within that attempt; new approved-scope revisions get new keys.
 
 A builder must be able to plan from it without going back to anyone. Cover:
 
@@ -234,6 +249,10 @@ version-bound receipt path rather than directly applying the old chat snapshot.
 
 ## 8. Builder check and code check
 
+On the completed HLD, re-read/apply `design.after`; incorporate feedback into
+the HLD/deep dive/questions before these normal checks. If it raises an open
+question, return to the existing question path rather than requesting approval.
+
 Run the builder check before requesting approval. Run the code check with the builder check, once per HLD version.
 
 - **The builder check** asks what a builder would still need answered. Dispatch a fresh subagent with [builder-check-prompt.md](./builder-check-prompt.md). Give it the domain (the repo's stack) and the path to `hld.md`.
@@ -250,6 +269,9 @@ Run the builder check before requesting approval. Run the code check with the bu
 ## 9. Nothing open: request approval
 
 1. Recheck current design ownership and reconcile/consume pending feedback.
+   Read/apply `designApproval.before` for this request target before publication.
+   Incorporate feedback and rerun affected design/builder/code checks before
+   continuing; this hook cannot approve its own changes.
    Before any upload, description change or approval comment, capture the
    current design target from item state as
    `{"designId":<ado.hldId>,"version":<old version>,"requestedAt":<old approvalRequestedAt or null>,"roundPostedAt":<round cutoff or null>}`.

@@ -2,6 +2,7 @@
 // Success prints JSON and exits 0. Failure prints {"error":"<CODE>","message":"..."} and exits 1.
 import { readFileSync } from 'node:fs';
 import { codePath, executionContext } from './execution.ts';
+import { phaseInstructions, repositoryPhaseInstructions } from './customInstructions.ts';
 import { getItem, getItems, itemPath, newItem, setItem, setItemRepo, setItemStage } from './items.ts';
 import { heartbeat, lockItem, unlockItem } from './lock.ts';
 import { getQueue, getQueueReport } from './queue.ts';
@@ -109,6 +110,17 @@ export const COMMANDS: Record<string, Command> = {
     run: (p) => setItemRepo(p.Id, p.Name, p.Org, p.Project),
   },
   'memory-path': { required: ['Org', 'Project', 'Repo'], run: (p) => ({ path: memoryPath(p.Org, p.Project, p.Repo) }) },
+  'phase-instructions': {
+    required: ['Phase'], optional: ['Id', 'Org', 'Project', 'Repo'], numbers: ['Id'],
+    run: (p) => {
+      const hasRepository = ['Org', 'Project', 'Repo'].some(key => p[key] !== undefined);
+      if (p.Id !== undefined && !hasRepository) return phaseInstructions(p.Id, p.Phase);
+      if (p.Id !== undefined || !['Org', 'Project', 'Repo'].every(key => typeof p[key] === 'string' && p[key].trim())) {
+        fail('ASDF_BAD_ARGUMENT', 'phase-instructions needs either -Id or all of -Org -Project -Repo, not both');
+      }
+      return repositoryPhaseInstructions({ org: p.Org, project: p.Project, name: p.Repo }, p.Phase);
+    },
+  },
   'worktree-path': { required: ['Id', 'Owner'], numbers: ['Id'], run: (p) => reserveWorktreePath(p.Id, p.Owner) },
   'source-fallback': { required: ['Id', 'Owner', 'BaseRef', 'Reason'], numbers: ['Id'],
     run: (p) => sourceFallback(p.Id, p.Owner, p.BaseRef, p.Reason) },

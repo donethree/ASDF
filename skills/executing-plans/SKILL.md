@@ -47,7 +47,10 @@ preflight, ownership, approval or dependency blockers.
 
 ## ASDF overlay (read first; it overrides anything below)
 
-- **Fallback only.** Use this skill only when subagents cannot be dispatched. Otherwise ASDF always uses `asdf:subagent-driven-development`.
+- **Fallback only.** Use this skill only when subagents cannot be dispatched.
+  If an explicit replacement driver is selected, use SDD's entry
+  preflight/driver selection. Follow [the phase-instructions contract](../using-asdf/phase-instructions.md);
+  an unavailable named driver fails explicitly, never silently falls back here.
 - **Nobody is watching.** Wherever this skill says to stop and ask, or mentions "your human partner", do this instead:
   - post the `blocker` comment on the item (`asdf:ado-work-items`);
   - run `asdf.ts stage -Id <id> -Stage blocked -Reason "<short reason>"`;
@@ -61,7 +64,7 @@ preflight, ownership, approval or dependency blockers.
 - **Heartbeat.** Reuse the live or unattended operation owner from `asdf:using-asdf`; acquire one on direct entry. Run `asdf.ts heartbeat -Id <id> -Owner <operation owner>` between tasks. If heartbeat fails with ASDF_LOCK_NOT_OWNER, stop at once and write nothing more. Another pass has taken the item over: no commits, comments, stage changes or unlock.
 - **Task completion.** `task-done` must exit 0 and report `recorded: true`. A nonzero exit or `recorded: false` leaves the task incomplete; read its test log and fix or block, never advance on a success-shaped tool response. Pass `-KnownFailure "<which known failures>"` only when every failure in the log is listed in `known-failures.md`.
 - **Rulings** also become `P<n>` rows in `decisions.md`.
-- **The final review is the Review task.** When every task is done, run `asdf.ts stage -Id <id> -Stage self-review`, then `asdf:requesting-code-review`. Without subagents, that skill runs its reviews itself and says so in the Review task.
+- **The final review is the Review task.** When every task is done, complete `implementation.after` as in Final Review, then run `asdf.ts stage -Id <id> -Stage self-review` and `asdf:requesting-code-review`. Without subagents, that skill runs its reviews itself and says so in the Review task.
 
 ## When to Use
 
@@ -150,15 +153,16 @@ and the new one resumes from the same ledger.
   (`<item>\sdd\`, in the asdf-context), home to every
   artifact for THIS plan: ledger, briefs, review packages. Another plan's
   directory is never yours to read or write.
-- Check for this plan's ledger at `<item>\sdd\ledger.md`. If its first
-  line names your plan file, tasks with a `Task <N>: complete` line are
+- Check for this plan's ledger at `<item>\sdd\ledger.md`. If it records
+  your plan file, tasks with a `Task <N>: complete` line are
   DONE — do not redo them; resume at the first task without one. Their
   commits exist in git even when your context no longer remembers making
   them: after compaction, trust the ledger and `git log` over your own
-  recollection. A ledger whose first line names a different plan file is
+  recollection. A ledger whose plan identity names a different plan file is
   another plan's progress: leave it and start your own, fresh.
-- Create the ledger with its identity as the first line:
-  `# SDD ledger — plan: <plan file path>`.
+- Record the plan identity with `ledger-add`:
+  `# SDD ledger — plan: <plan file path>`. Keep earlier phase-hook records
+  intact; initializing a plan must not erase completed/in-progress hooks.
 - `git clean -fdx` will destroy the workspace (it's git-ignored scratch);
   if that happens, recover from `git log`.
 
@@ -180,8 +184,18 @@ produces against what the other consumes, and what you found. Tasks that
 share nothing get no row; a plan whose tasks share nothing gets the single
 line `Pre-flight: no shared interfaces`. Rule on each conflict a row
 surfaces with the spec as the binding authority, record the ruling beside
-its row, and start Task 1. Each task's own text is checked when you read
+its row, then continue to the implementation boundary below before Task 1.
+Each task's own text is checked when you read
 its brief, not here.
+
+Before Task 1, after the checkout/baseline, scope/dependency and plan preflight,
+read/apply `implementation.before` once for the durable attempt. If it selects
+a replacement driver, follow the shared exclusive-driver contract instead of
+The Task Loop: verify availability, dispatch once with approved plan/spec,
+current ledger and refreshed packet, await/reconcile and verify its completion/
+review/test evidence, then go to Final Review. Unavailable dispatch is explicit
+failure, not permission to ignore the selection. With no selection, execute
+the default inline loop; a hook completed in SDD before fallback is not repeated.
 
 ## The Task Loop
 
@@ -261,8 +275,11 @@ mark the todo complete and take the next task.
 
 ASDF has no separate whole-branch review here. When the last task is done:
 
-1. Run `asdf.ts stage -Id <id> -Stage self-review`.
-2. Run `asdf:requesting-code-review`, which runs the whole-branch reviews. Without subagents, it does them itself and records that on the Review task. Then it opens the PR through `asdf:finishing-a-development-branch`.
+1. Re-read/apply `implementation.after` on the completed artifacts and test/
+   commit evidence. Incorporate feedback under the normal TDD, completion and
+   verification gates; checkpoint it without replaying completed tasks.
+2. Run `asdf.ts stage -Id <id> -Stage self-review`.
+3. Run `asdf:requesting-code-review`, which runs the whole-branch reviews. Without subagents, it does them itself and records that on the Review task. Then it opens the PR through `asdf:finishing-a-development-branch`.
 
 ## Finish
 

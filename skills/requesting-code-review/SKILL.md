@@ -13,6 +13,11 @@ The Review task is ASDF's own review of its work, before anyone else sees a PR. 
 
 - Reuse the operation owner from `asdf:using-asdf`. The item is in stage `self-review`.
 - Refresh and save its execution context. Give the packet to every reviewer, including repo-provided skills/agents; require explicit codeRoot cwd, applicable target-repo instructions, read-only code and item-local reports.
+- Follow [the phase-instructions contract](../using-asdf/phase-instructions.md).
+  After verifying current assignment/lock and context, read/apply
+  `selfReview.before` before packaging or dispatch. Supply current packet
+  customInstructions and applicable directions to every reviewer/repair worker;
+  they do not execute another copy of this phase's hooks.
 - If `ado.reviewId` is set and still assigned to you, move that Review task to `InProgress`. Otherwise keep the report local for the PR; never invent an id or overwrite the governing Task's description.
 - Build the whole-branch package in verified codeRoot (worktree or recorded source mode):
 
@@ -35,6 +40,9 @@ Run every review skill the repo provides. ASDF's own reviewer runs too, and each
    - **a skill:** "Use the `<name>` skill to review the change in `<package path>`; report findings as Critical / Important / Minor with file and line";
    - **an agent:** dispatch that agent with the same request.
 
+   Include the execution packet's repository customizations and role-relevant
+   directions in both forms; the phase owner executes hooks, not these children.
+
 Check for over-engineering and bloat, not just bugs. The ASDF reviewer's rubric covers it: the smallest change that delivers the HLD, readable and not verbose, no abstraction nobody asked for, and no dependency the HLD didn't list.
 
 The ASDF reviewer checks that everything that worked before still works, including callers and readers the HLD doesn't list. It searches the worktree for every caller and reader of what the change modifies, and checks the change against the HLD's What must keep working and Edge cases sections.
@@ -56,6 +64,11 @@ If subagents can't be dispatched in this session (the `asdf:executing-plans` fal
   - the reviews that ran,
   - findings fixed,
   - findings declined, with reasons.
+- **After hook:** on these reports and fixed/re-reviewed code, re-read/apply
+  `selfReview.after`. Incorporate feedback and run the affected verification/
+  scoped review gates, updating reports/summary before handoff. Hook-added code
+  is not covered by an older review HEAD. Ledger the completed review revision;
+  no PR while required findings or approval/dependency blockers remain.
 - **Hand off:** run `asdf:finishing-a-development-branch` with the same operation owner to open the PR. That skill completes an existing Review task only while it is still assigned to you.
 
 ## Common rationalizations

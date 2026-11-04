@@ -35,6 +35,9 @@ preflight, ownership, approval or dependency blockers.
 
 ## ASDF overlay (read first; it overrides anything below)
 
+Follow [the phase-instructions contract](../using-asdf/phase-instructions.md).
+The default task loop below runs only when no replacement driver is selected.
+
 - **Nobody is watching.** Wherever this skill says to stop and ask, or mentions "your human partner", do this instead:
   - post the `blocker` comment on the item (`asdf:ado-work-items`);
   - run `asdf.ts stage -Id <id> -Stage blocked -Reason "<short reason>"`;
@@ -59,8 +62,9 @@ preflight, ownership, approval or dependency blockers.
 - **Heartbeat.** Reuse the live or unattended operation owner from `asdf:using-asdf`; acquire one on direct entry. Between tasks, run `asdf.ts heartbeat -Id <id> -Owner <operation owner>` so the item's lock stays fresh. If heartbeat fails with ASDF_LOCK_NOT_OWNER, stop at once and write nothing more. Another pass has taken the item over: no commits, comments, stage changes or unlock.
 - **Rulings are planning decisions.** Besides the ledger line, add a `P<n>` row to `decisions.md` with provenance `ASDF planning decision`. The PR description lists them.
 - **Repo build and test.** Implementers run builds and tests through the repo's own skills when `asdf.ts repo-skills -RepoPath "<codeRoot>" -Kind build` (or `-Kind test`) finds any.
-- **No subagents?** If the `task` tool isn't available in this session, switch to `asdf:executing-plans`.
+- **No subagents?** If the `task` tool isn't available in this session and no replacement driver is selected, switch to `asdf:executing-plans`. An unavailable named driver fails explicitly; never substitute the default loop.
 - **The final review is the Review task.** When every plan task is complete:
+  - complete `implementation.after` and its normal checks as in Final Review below;
   - run `asdf.ts stage -Id <id> -Stage self-review`;
   - then run `asdf:requesting-code-review`. It reviews the whole branch (the ASDF reviewer plus the repo's review skills) and then opens the PR.
 
@@ -175,14 +179,15 @@ a ledger file, not only in todos.
   directory (`<item>\sdd\`, in the asdf-context), home to
   every artifact for THIS plan: ledger, briefs, reports, review packages.
   Another plan's directory is never yours to read or write.
-- Check for this plan's ledger at `<item>\sdd\ledger.md`. If its first
-  line names your plan file, tasks with a `Task <N>: complete` line are DONE
+- Check for this plan's ledger at `<item>\sdd\ledger.md`. If it records
+  your plan file, tasks with a `Task <N>: complete` line are DONE
   — do not re-dispatch them; resume at the first task without one. A task
   whose last line is a fix round is mid-loop: resume the loop at the next
-  round. A ledger whose first line names a different plan file — is another
+  round. A ledger whose plan identity names a different plan file is another
   plan's progress: leave it in place and start your own, fresh.
-- Create the ledger with its identity as the first line:
-  `# SDD ledger — plan: <plan file path>`.
+- Record the plan identity through `ledger-add`:
+  `# SDD ledger — plan: <plan file path>`. Preserve any existing phase-hook
+  records; a ledger created by earlier phases is not a fresh empty file.
 - The ledger is your recovery map: the commits it names exist in git even
   when your context no longer remembers creating them. After compaction,
   trust the ledger and `git log` over your own recollection.
@@ -213,9 +218,21 @@ Write the table to the ledger. Rule on everything you find before execution
 begins — each finding against the plan text that mandates it — and record
 each ruling in the ledger. If the scan is clean, proceed without comment.
 Rule on each conflict it surfaces — the spec is the binding authority, the
-plan is its argument — record the ruling beside its row, and dispatch
-Task 1. The review loop remains the net for conflicts that only emerge from
-implementation.
+plan is its argument — record the ruling beside its row, and continue to
+driver selection before dispatch. The review loop remains the net for conflicts
+that only emerge from implementation.
+
+### Implementation boundary and driver selection
+
+After checkout/baseline, approved scope/dependencies and the plan preflight
+above pass, read/apply `implementation.before` before any default task dispatch.
+Consult its ledger checkpoint first, including a recorded replacement selection
+on resume. If it selects a named agent, follow the shared **exclusive
+implementation driver** contract: verify availability, dispatch once with the
+approved plan/spec, current task ledger and refreshed execution packet, and
+require the same completion/test/review evidence. Await/reconcile it, then go
+directly to Final Review below. Do not enter The Task Loop for that driver's
+work. Without a selection, continue the existing default task/review loop.
 
 ## Model Selection
 
@@ -482,8 +499,12 @@ parked-with-ruling at the cap.
 
 ASDF has no separate whole-branch review here. When the last plan task's review passes:
 
-1. Run `asdf.ts stage -Id <id> -Stage self-review`.
-2. Run `asdf:requesting-code-review`. It builds the whole-branch review package and dispatches the ASDF reviewer and every review skill the repo provides, then the fixes and scoped re-reviews. When that's done, it runs `asdf:finishing-a-development-branch` to open the PR.
+1. Re-read/apply `implementation.after` on the completed task artifacts,
+   tests/reviews and commit range. Incorporate feedback with normal TDD,
+   verification and scoped task review; a selected driver's report does not
+   waive these checks. Checkpoint completion without rerunning completed tasks.
+2. Run `asdf.ts stage -Id <id> -Stage self-review`.
+3. Run `asdf:requesting-code-review`. It builds the whole-branch review package and dispatches the ASDF reviewer and every review skill the repo provides, then the fixes and scoped re-reviews. When that's done, it runs `asdf:finishing-a-development-branch` to open the PR.
 
 ## Finish
 
