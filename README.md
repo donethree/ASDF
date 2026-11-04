@@ -1,13 +1,6 @@
-# ASDF: Automated Software Development Workflow
+# ASDF: Automated Software Development Flow
 
-> **Credits.** ASDF is heavily based on two projects, and we're grateful to both.
->
-> - **[Superpowers](https://github.com/obra/superpowers)** by Jesse Vincent. ASDF's engine is copied from Superpowers 7.0.0 and adapted for GitHub Copilot and Azure DevOps.
->   - Adapted: brainstorming, writing-plans, subagent-driven-development, executing-plans, requesting-code-review, receiving-code-review, finishing-a-development-branch, using-git-worktrees, and using-asdf (from using-superpowers).
->   - Copied with small edits: test-driven-development, systematic-debugging, verification-before-completion, writing-skills and dispatching-parallel-agents.
->
->   Superpowers is MIT-licensed, and its copyright notice is kept in [LICENSE](LICENSE).
-> - **[Superlite](https://github.com/iha2/superlite)**. ASDF borrows two of its ideas: asking questions in batched rounds with a recommended answer for each, and recording the agent's own calls instead of stopping to ask. No Superlite code or text is copied.
+https://github.com/user-attachments/assets/c8d0a4b3-d73d-4a56-9f36-43b54ba5d26e
 
 ASDF is a plugin for **GitHub Copilot** (the Copilot CLI and the GitHub Copilot app). It takes an **Azure DevOps** work item from assignment to a merged pull request.
 
@@ -539,3 +532,14 @@ Use `asdf.ts memory-path -Org <org> -Project <project> -Repo <repo>` for the enc
 ## License
 
 MIT, the same license as Superpowers. See [LICENSE](LICENSE), which also keeps Superpowers' copyright notice.
+
+## Credits
+
+ASDF is heavily based on two projects, and we're grateful to both.
+
+- **[Superpowers](https://github.com/obra/superpowers)** by Jesse Vincent. ASDF's engine is copied from Superpowers 7.0.0 and adapted for GitHub Copilot and Azure DevOps.
+  - Adapted: brainstorming, writing-plans, subagent-driven-development, executing-plans, requesting-code-review, receiving-code-review, finishing-a-development-branch, using-git-worktrees, and using-asdf (from using-superpowers).
+  - Copied with small edits: test-driven-development, systematic-debugging, verification-before-completion, writing-skills and dispatching-parallel-agents.
+
+  Superpowers is MIT-licensed, and its copyright notice is kept in [LICENSE](LICENSE).
+- **[Superlite](https://github.com/iha2/superlite)**. ASDF borrows two of its ideas: asking questions in batched rounds with a recommended answer for each, and recording the agent's own calls instead of stopping to ask. No Superlite code or text is copied.
